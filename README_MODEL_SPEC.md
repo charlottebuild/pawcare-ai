@@ -39,6 +39,10 @@ Start with `docs/manifest.md` for the full document map.
    - Approved guideline IDs for health, medication safety, post-op recovery, social behavior, and owner communication
    - Required source layer for grounded recommendations
 
+6. `docs/development_workflow.md`
+   - PDCA loop for AI-assisted development
+   - Small-step implementation, test checks, documentation updates, and git discipline
+
 ---
 
 ## North Star
@@ -58,3 +62,4 @@ Before changing agent behavior, skill contracts, workflow state, or recommendati
 3. Update `docs/constitution.md` if any safety or tone rule changes.
 4. Update `docs/guidelines.md` if recommendation grounding changes.
 5. Add or update edge cases in `docs/test_cases.md` when behavior changes.
+6. Follow `docs/development_workflow.md`: Plan, Do, Check, Act, then commit small.

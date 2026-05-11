@@ -16,6 +16,7 @@ This file intentionally stays short. The model spec is split across focused docu
 | `docs/agents_definition.md` | Agent responsibilities, Orchestrator-Worker pattern, active context, handoff | Building or modifying agent workflows |
 | `docs/test_cases.md` | Required edge cases and regression checks | Testing skills, agents, safety filters, and schema validation |
 | `docs/guidelines.md` | Approved guideline IDs and grounding rules | Building Health Agent, Safety Agent, recovery flows, and recommendations |
+| `docs/development_workflow.md` | PDCA development loop and git discipline | Planning or executing any code change |
 
 ---
 
@@ -45,3 +46,4 @@ The Coordinator owns routing and context packaging. Worker agents stay inside th
 - Social stress signals such as `lip_licking`, `yawning`, `whale_eye`, `frozen`, and `stiff_body` must be preserved in state.
 - Behavior changes should be checked against `docs/test_cases.md`.
 - Safety-relevant recommendations should cite approved IDs from `docs/guidelines.md`.
+- Code changes should follow `docs/development_workflow.md`: Plan, Do, Check, Act.
