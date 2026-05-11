@@ -1,0 +1,17 @@
+[project]
+name = "pawcare-ai"
+version = "0.1.0"
+description = "Stateful multi-agent dog care assistant"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.4,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8,<9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend/src"]
