@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from pawcare.agents import BehaviorAgent, CommunicationAgent, SafetyAgent
+from pawcare.agents import BehaviorAgent, CommunicationAgent, HealthAgent, SafetyAgent
 from pawcare.schemas.state import (
     ActiveContext,
     AgentOutput,
@@ -22,6 +22,15 @@ from pawcare.schemas.state import (
     Species,
 )
 from pawcare.skills import LogExtractor
+
+HEALTH_OBSERVATION_CATEGORIES = {
+    "food_intake",
+    "stool",
+    "vomiting",
+    "energy",
+    "mobility",
+    "medication_note",
+}
 
 
 @dataclass(frozen=True)
@@ -43,11 +52,13 @@ class CareCoordinator:
         *,
         log_extractor: LogExtractor | None = None,
         behavior_agent: BehaviorAgent | None = None,
+        health_agent: HealthAgent | None = None,
         safety_agent: SafetyAgent | None = None,
         communication_agent: CommunicationAgent | None = None,
     ) -> None:
         self.log_extractor = log_extractor or LogExtractor()
         self.behavior_agent = behavior_agent or BehaviorAgent()
+        self.health_agent = health_agent or HealthAgent()
         self.safety_agent = safety_agent or SafetyAgent()
         self.communication_agent = communication_agent or CommunicationAgent()
 
@@ -83,30 +94,21 @@ class CareCoordinator:
             observations=batch.observations,
         )
 
-        active_context = self._build_behavior_active_context(state=state)
-        state.active_context = active_context
-
-        behavior_output = self.behavior_agent.analyze(
-            active_context=active_context,
-            observations=[
-                observation
-                for observation in state.observations
-                if observation.observation_id in active_context.current_observation_ids
-            ],
-        )
-        state.agent_outputs.append(behavior_output)
-
         accepted_updates: list[ProposedUpdate] = []
         rejected_updates: list[ProposedUpdate] = []
-        if behavior_output.proposed_update is not None:
-            if self._merge_update(
-                state=state,
-                output=behavior_output,
-                update=behavior_output.proposed_update,
-            ):
-                accepted_updates.append(behavior_output.proposed_update)
-            else:
-                rejected_updates.append(behavior_output.proposed_update)
+
+        for active_context, output in self._run_worker_agents(state=state):
+            state.active_context = active_context
+            state.agent_outputs.append(output)
+            if output.proposed_update is not None:
+                if self._merge_update(
+                    state=state,
+                    output=output,
+                    update=output.proposed_update,
+                ):
+                    accepted_updates.append(output.proposed_update)
+                else:
+                    rejected_updates.append(output.proposed_update)
 
         if state.risk_assessment is not None:
             candidate = self._build_recommendation_candidate(state=state)
@@ -125,20 +127,77 @@ class CareCoordinator:
             rejected_updates=rejected_updates,
         )
 
+    def _run_worker_agents(self, *, state: PawCareState) -> list[tuple[ActiveContext, AgentOutput]]:
+        results: list[tuple[ActiveContext, AgentOutput]] = []
+
+        health_context = self._build_health_active_context(state=state)
+        if health_context.current_observation_ids:
+            health_output = self.health_agent.analyze(
+                active_context=health_context,
+                observations=[
+                    observation
+                    for observation in state.observations
+                    if observation.observation_id in health_context.current_observation_ids
+                ],
+            )
+            results.append((health_context, health_output))
+
+        behavior_context = self._build_behavior_active_context(state=state)
+        if behavior_context.current_observation_ids:
+            behavior_output = self.behavior_agent.analyze(
+                active_context=behavior_context,
+                observations=[
+                    observation
+                    for observation in state.observations
+                    if observation.observation_id in behavior_context.current_observation_ids
+                ],
+            )
+            results.append((behavior_context, behavior_output))
+        return results
+
+    def _build_health_active_context(self, *, state: PawCareState) -> ActiveContext:
+        health_observation_ids = [
+            observation.observation_id
+            for observation in state.observations
+            if observation.category in HEALTH_OBSERVATION_CATEGORIES
+        ]
+
+        return ActiveContext(
+            target_agent="HealthAgent",
+            task="Assess whether the current health observations indicate monitoring, owner notification, or escalation needs.",
+            current_observation_ids=health_observation_ids,
+            relevant_baseline={
+                "health_baseline": state.health_baseline.model_dump(),
+                "medical_notes": state.dog_profile.care_notes,
+            },
+            allowed_guideline_ids=[
+                "GL_STOOL_001",
+                "GL_APPETITE_002",
+                "GL_VOMITING_001",
+                "GL_LETHARGY_001",
+                "GL_LAMENESS_001",
+                "GL_NSAID_SIDE_EFFECT_001",
+                "GL_ACL_POSTOP_001",
+            ],
+            required_output_path="agent_outputs",
+            must_answer=[
+                "Which health signals are present?",
+                "Which guideline IDs ground the concern?",
+                "What information is missing?",
+            ],
+        )
+
     def _build_behavior_active_context(self, *, state: PawCareState) -> ActiveContext:
         social_observation_ids = [
             observation.observation_id
             for observation in state.observations
             if observation.category == "social_interaction"
         ]
-        observation_ids = social_observation_ids or [
-            observation.observation_id for observation in state.observations
-        ]
 
         return ActiveContext(
             target_agent="BehaviorAgent",
             task="Assess whether the current observations indicate social stress, resource concern, or appropriate play.",
-            current_observation_ids=observation_ids,
+            current_observation_ids=social_observation_ids,
             relevant_baseline={
                 "social_profile": state.behavioral_baseline.social_profile.model_dump(),
                 "resource_guarding_profile": state.behavioral_baseline.resource_guarding_profile.model_dump(),
@@ -199,32 +258,63 @@ class CareCoordinator:
     ) -> RiskAssessment:
         if state.risk_assessment is None:
             state.risk_assessment = RiskAssessment(
-                risk_level=self._risk_level_from_behavior_output(output),
-                risk_band=self._risk_band_from_behavior_output(output),
-                primary_risk_domain=RiskDomain.social,
+                risk_level=self._risk_level_from_agent_output(output),
+                risk_band=self._risk_band_from_agent_output(output),
+                primary_risk_domain=self._risk_domain_from_agent_output(output),
                 risk_factors=[],
                 protective_factors=[],
                 missing_information=list(output.missing_information),
-                recommended_action=self._recommended_action_from_behavior_output(output),
-                escalation_conditions=[
-                    "stress signals increase",
-                    "resource guarding repeats",
-                    "growling, snapping, or injury occurs",
-                    "the pet cannot relax after separation",
-                ],
+                recommended_action=self._recommended_action_from_agent_output(output),
+                escalation_conditions=self._escalation_conditions_from_agent_output(output),
                 logic=output.reasoning_trace,
                 source_guideline_ids=list(output.source_guideline_ids),
             )
         else:
+            new_risk_level = self._risk_level_from_agent_output(output)
+            if new_risk_level > state.risk_assessment.risk_level:
+                state.risk_assessment.risk_level = new_risk_level
+                state.risk_assessment.risk_band = self._risk_band_from_agent_output(output)
+                state.risk_assessment.recommended_action = (
+                    self._recommended_action_from_agent_output(output)
+                )
+                state.risk_assessment.escalation_conditions = (
+                    self._escalation_conditions_from_agent_output(output)
+                )
+
+            output_domain = self._risk_domain_from_agent_output(output)
+            if state.risk_assessment.primary_risk_domain != output_domain:
+                if not any(
+                    conflict.type == PendingConflictType.behavior_vs_health
+                    for conflict in state.current_session_state.pending_conflicts
+                ):
+                    state.current_session_state.pending_conflicts.append(
+                        PendingConflict(
+                            conflict_id=(
+                                f"conflict_{len(state.current_session_state.pending_conflicts) + 1:03d}"
+                            ),
+                            type=PendingConflictType.behavior_vs_health,
+                            description=(
+                                "Health and behavior observations both contributed to this risk assessment."
+                            ),
+                            involved_agents=["HealthAgent", "BehaviorAgent"],
+                            resolved=False,
+                        )
+                    )
+                state.risk_assessment.primary_risk_domain = RiskDomain.mixed
+
             for item in output.missing_information:
                 if item not in state.risk_assessment.missing_information:
                     state.risk_assessment.missing_information.append(item)
             for guideline_id in output.source_guideline_ids:
                 if guideline_id not in state.risk_assessment.source_guideline_ids:
                     state.risk_assessment.source_guideline_ids.append(guideline_id)
+            if output.reasoning_trace not in state.risk_assessment.logic:
+                state.risk_assessment.logic = (
+                    state.risk_assessment.logic + " " + output.reasoning_trace
+                )
         return state.risk_assessment
 
-    def _risk_level_from_behavior_output(self, output: AgentOutput) -> int:
+    def _risk_level_from_agent_output(self, output: AgentOutput) -> int:
         conclusion = output.conclusion.lower()
         if "high" in conclusion:
             return 8
@@ -234,7 +324,7 @@ class CareCoordinator:
             return 2
         return 4
 
-    def _risk_band_from_behavior_output(self, output: AgentOutput) -> RiskBand:
+    def _risk_band_from_agent_output(self, output: AgentOutput) -> RiskBand:
         conclusion = output.conclusion.lower()
         if "high" in conclusion:
             return RiskBand.high
@@ -242,8 +332,20 @@ class CareCoordinator:
             return RiskBand.moderate
         return RiskBand.low
 
-    def _recommended_action_from_behavior_output(self, output: AgentOutput) -> str:
+    def _risk_domain_from_agent_output(self, output: AgentOutput) -> RiskDomain:
+        if output.agent == "HealthAgent":
+            return RiskDomain.health
+        return RiskDomain.social
+
+    def _recommended_action_from_agent_output(self, output: AgentOutput) -> str:
         conclusion = output.conclusion.lower()
+        if output.agent == "HealthAgent":
+            if "high" in conclusion:
+                return "notify_owner_and_seek_veterinary_guidance"
+            if "moderate" in conclusion:
+                return "notify_owner_and_monitor_health_signs"
+            return "continue_health_monitoring"
+
         if "high" in conclusion:
             return "separate_and_notify_owner"
         if "resource" in conclusion:
@@ -251,6 +353,23 @@ class CareCoordinator:
         if "play" in conclusion:
             return "continue_monitoring"
         return "monitor_and_collect_more_information"
+
+    def _escalation_conditions_from_agent_output(self, output: AgentOutput) -> list[str]:
+        if output.agent == "HealthAgent":
+            return [
+                "vomiting repeats or worsens",
+                "bloody or black/tarry stool appears",
+                "energy drops below baseline",
+                "the pet refuses food or water",
+                "post-op mobility worsens or non-weight-bearing continues",
+            ]
+
+        return [
+            "stress signals increase",
+            "resource guarding repeats",
+            "growling, snapping, or injury occurs",
+            "the pet cannot relax after separation",
+        ]
 
     def _build_recommendation_candidate(self, *, state: PawCareState) -> FinalRecommendation:
         risk = state.risk_assessment

@@ -99,6 +99,29 @@ class LogExtractor:
             observations.append(vomiting_observation)
             missing_information.extend(["vomiting_frequency", "energy_level"])
 
+        mobility_observation = self._extract_mobility_observation(
+            raw_text=raw_text,
+            text=text,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            sequence=len(observations) + 1,
+        )
+        if mobility_observation is not None:
+            observations.append(mobility_observation)
+            missing_information.extend(["affected_limb", "pain_signs"])
+
+        medication_observation = self._extract_medication_observation(
+            raw_text=raw_text,
+            text=text,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            sequence=len(observations) + 1,
+        )
+        if medication_observation is not None:
+            observations.append(medication_observation)
+
         energy_observation = self._extract_energy_observation(
             raw_text=raw_text,
             text=text,
@@ -239,13 +262,23 @@ class LogExtractor:
             "软便",
             "腹泻",
             "拉稀",
+            "blood in stool",
+            "bloody stool",
+            "black stool",
+            "tarry stool",
+            "血便",
+            "黑便",
         ]
         no_stool_terms = ["hasn't pooped", "no poop", "没拉", "没拉屎", "不上厕所"]
         if not self._contains_any(text, stool_terms + no_stool_terms):
             return None
 
         stool_quality = "absent"
-        if self._contains_any(text, ["soft", "软便"]):
+        if self._contains_any(text, ["bloody stool", "blood in stool", "血便", "便血"]):
+            stool_quality = "bloody"
+        elif self._contains_any(text, ["black stool", "tarry stool", "黑便"]):
+            stool_quality = "black_tarry"
+        elif self._contains_any(text, ["soft", "软便"]):
             stool_quality = "soft"
         elif self._contains_any(text, ["watery", "diarrhea", "腹泻", "拉稀"]):
             stool_quality = "watery"
@@ -261,7 +294,7 @@ class LogExtractor:
             raw_text=raw_text,
             confidence=0.84,
             health_context={"stool_quality": stool_quality},
-            severity_score=6 if stool_quality == "watery" else 3,
+            severity_score=8 if stool_quality in {"bloody", "black_tarry"} else 6 if stool_quality == "watery" else 3,
             source_guideline_ids=["GL_STOOL_001"],
         )
 
@@ -289,6 +322,98 @@ class LogExtractor:
             health_context={"vomiting_reported": True},
             severity_score=7,
             source_guideline_ids=["GL_VOMITING_001"],
+        )
+
+    def _extract_mobility_observation(
+        self,
+        *,
+        raw_text: str,
+        text: str,
+        timestamp: str,
+        species: Species,
+        source: Source,
+        sequence: int,
+    ) -> Observation | None:
+        mobility_terms = [
+            "limp",
+            "limping",
+            "won't put",
+            "cannot put",
+            "not putting",
+            "non weight",
+            "non-weight",
+            "can't bear weight",
+            "acl",
+            "ccl",
+            "tplo",
+            "tta",
+            "跛",
+            "瘸",
+            "不负重",
+            "脚不着地",
+            "手术",
+        ]
+        if not self._contains_any(text, mobility_terms):
+            return None
+
+        non_weight_bearing = self._contains_any(
+            text,
+            [
+                "won't put",
+                "cannot put",
+                "not putting",
+                "non weight",
+                "non-weight",
+                "can't bear weight",
+                "不负重",
+                "脚不着地",
+            ],
+        )
+        post_op_context = self._contains_any(text, ["acl", "ccl", "tplo", "tta", "surgery", "post-op", "术后", "手术"])
+        context = {
+            "mobility": "limping",
+            "weight_bearing": "non_weight_bearing" if non_weight_bearing else "partial_weight_bearing",
+            "post_op_context": post_op_context,
+        }
+
+        return self._base_observation(
+            sequence=sequence,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            category=ObservationCategory.mobility,
+            raw_text=raw_text,
+            confidence=0.84,
+            health_context=context,
+            severity_score=8 if non_weight_bearing and post_op_context else 6,
+            source_guideline_ids=["GL_LAMENESS_001", "GL_ACL_POSTOP_001"] if post_op_context else ["GL_LAMENESS_001"],
+        )
+
+    def _extract_medication_observation(
+        self,
+        *,
+        raw_text: str,
+        text: str,
+        timestamp: str,
+        species: Species,
+        source: Source,
+        sequence: int,
+    ) -> Observation | None:
+        medication_terms = ["nsaid", "rimadyl", "carprofen", "meloxicam", "pain med", "pain medication", "止痛药", "消炎药", "药"]
+        if not self._contains_any(text, medication_terms):
+            return None
+
+        return self._base_observation(
+            sequence=sequence,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            category=ObservationCategory.medication_note,
+            raw_text=raw_text,
+            confidence=0.78,
+            health_context={"nsaid_or_pain_med_context": True},
+            severity_score=5,
+            source_guideline_ids=["GL_NSAID_SIDE_EFFECT_001", "GL_MEDICATION_SAFETY_001"],
         )
 
     def _extract_energy_observation(

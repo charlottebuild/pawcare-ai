@@ -48,9 +48,10 @@ def test_coordinator_builds_active_context_and_merges_behavior_risk_update() -> 
     state = result.state
     assert state.active_context is not None
     assert state.active_context.target_agent == "BehaviorAgent"
-    assert state.agent_outputs[0].agent == "BehaviorAgent"
-    assert state.agent_outputs[0].proposed_update is not None
-    assert result.accepted_updates == [state.agent_outputs[0].proposed_update]
+    assert [output.agent for output in state.agent_outputs] == ["BehaviorAgent"]
+    behavior_output = next(output for output in state.agent_outputs if output.agent == "BehaviorAgent")
+    assert behavior_output.proposed_update is not None
+    assert behavior_output.proposed_update in result.accepted_updates
     assert state.risk_assessment is not None
     assert state.risk_assessment.risk_band == "moderate"
     assert state.risk_assessment.primary_risk_domain == "social"
@@ -89,7 +90,7 @@ def test_coordinator_merges_play_case_as_protective_factor() -> None:
     assert "Don't worry" not in state.final_recommendation.owner_message
 
 
-def test_coordinator_records_missing_social_context_conflict_for_food_only_log() -> None:
+def test_coordinator_routes_food_only_log_to_health_agent_without_behavior_conflict() -> None:
     result = CareCoordinator().handle_log(
         workflow_id="wf_003",
         dog_id="dog_123",
@@ -101,10 +102,49 @@ def test_coordinator_records_missing_social_context_conflict_for_food_only_log()
     )
 
     state = result.state
-    assert state.risk_assessment is None
-    assert state.safety_review is None
-    assert state.final_recommendation is None
+    assert state.risk_assessment is not None
+    assert state.risk_assessment.primary_risk_domain == "health"
+    assert state.risk_assessment.risk_band == "moderate"
+    assert state.safety_review is not None
+    assert state.final_recommendation is not None
+    assert [output.agent for output in state.agent_outputs] == ["HealthAgent"]
+    assert state.current_session_state.pending_conflicts == []
+    assert state.risk_assessment.escalation_conditions == [
+        "vomiting repeats or worsens",
+        "bloody or black/tarry stool appears",
+        "energy drops below baseline",
+        "the pet refuses food or water",
+        "post-op mobility worsens or non-weight-bearing continues",
+    ]
+
+
+def test_coordinator_merges_mixed_health_and_social_outputs() -> None:
+    result = CareCoordinator().handle_log(
+        workflow_id="wf_004",
+        dog_id="dog_123",
+        raw_text=(
+            "Mochi skipped dinner after a stressful intro with a larger dog. "
+            "She froze and licked her lips."
+        ),
+        timestamp="2026-05-08T19:00:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    state = result.state
+    assert [output.agent for output in state.agent_outputs] == [
+        "HealthAgent",
+        "BehaviorAgent",
+    ]
+    assert state.risk_assessment is not None
+    assert state.risk_assessment.primary_risk_domain == "mixed"
+    assert state.risk_assessment.risk_band == "moderate"
+    assert "GL_APPETITE_002" in state.risk_assessment.source_guideline_ids
+    assert "GL_SOCIAL_STRESS_001" in state.risk_assessment.source_guideline_ids
     assert len(state.current_session_state.pending_conflicts) == 1
     conflict = state.current_session_state.pending_conflicts[0]
-    assert conflict.type == "missing_information"
-    assert conflict.involved_agents == ["BehaviorAgent"]
+    assert conflict.type == "behavior_vs_health"
+    assert conflict.involved_agents == ["HealthAgent", "BehaviorAgent"]
+    assert state.safety_review is not None
+    assert state.final_recommendation is not None
