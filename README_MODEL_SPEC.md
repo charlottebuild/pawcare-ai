@@ -53,6 +53,32 @@ It must not diagnose. It must not provide medication instructions. It must not i
 
 ---
 
+## Try It Locally
+
+Install the package with dev dependencies:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Run the full test suite:
+
+```bash
+pytest -q
+```
+
+Run the product demo entrypoint:
+
+```bash
+PYTHONPATH=backend/src python -m pawcare.demo "Mochi barely touched breakfast."
+```
+
+The demo seeds one user with two pets, sends a message for `dog_mochi`, returns the safe user-facing response, and reports which observations were stored.
+
+The FastAPI app factory is available at `pawcare.api:create_app`. The API currently uses an in-memory repository and is intended for local/friend testing, not production deployment.
+
+---
+
 ## Vibe Coding Rule
 
 Before changing agent behavior, skill contracts, workflow state, or recommendation logic:
