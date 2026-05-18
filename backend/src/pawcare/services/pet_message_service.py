@@ -1,97 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Protocol
-
-from pawcare.schemas.state import (
-    BehavioralBaseline,
-    DogProfile,
-    HealthBaseline,
-    Observation,
-    UserResponse,
-)
+from pawcare.schemas.state import UserResponse
 from pawcare.services.log_processing_service import LogProcessingService
-
-
-class PetRecordAccessError(Exception):
-    """Raised when a pet record is missing or inaccessible to the user."""
-
-
-@dataclass(frozen=True)
-class UserAccount:
-    user_id: str
-    display_name: str | None = None
-    email: str | None = None
-
-
-@dataclass
-class PetRecord:
-    pet_id: str
-    user_id: str
-    dog_profile: DogProfile
-    behavioral_baseline: BehavioralBaseline
-    health_baseline: HealthBaseline
-    observations: list[Observation] = field(default_factory=list)
-
-
-class PetRepository(Protocol):
-    def create_user(self, user: UserAccount) -> UserAccount: ...
-
-    def create_pet(self, pet: PetRecord) -> PetRecord: ...
-
-    def list_pets(self, *, user_id: str) -> list[PetRecord]: ...
-
-    def get_pet(self, *, user_id: str, pet_id: str) -> PetRecord: ...
-
-    def append_observations(
-        self,
-        *,
-        user_id: str,
-        pet_id: str,
-        observations: list[Observation],
-    ) -> PetRecord: ...
-
-
-class InMemoryPetRepository:
-    """In-memory product workspace store for users and their pet records."""
-
-    def __init__(self) -> None:
-        self._users: dict[str, UserAccount] = {}
-        self._pets: dict[tuple[str, str], PetRecord] = {}
-
-    def create_user(self, user: UserAccount) -> UserAccount:
-        self._users[user.user_id] = user
-        return user
-
-    def create_pet(self, pet: PetRecord) -> PetRecord:
-        if pet.user_id not in self._users:
-            self.create_user(UserAccount(user_id=pet.user_id))
-        self._pets[(pet.user_id, pet.pet_id)] = pet
-        return pet
-
-    def list_pets(self, *, user_id: str) -> list[PetRecord]:
-        return [
-            pet
-            for (owner_id, _), pet in self._pets.items()
-            if owner_id == user_id
-        ]
-
-    def get_pet(self, *, user_id: str, pet_id: str) -> PetRecord:
-        try:
-            return self._pets[(user_id, pet_id)]
-        except KeyError as exc:
-            raise PetRecordAccessError("Pet record is not available.") from exc
-
-    def append_observations(
-        self,
-        *,
-        user_id: str,
-        pet_id: str,
-        observations: list[Observation],
-    ) -> PetRecord:
-        pet = self.get_pet(user_id=user_id, pet_id=pet_id)
-        pet.observations.extend(observations)
-        return pet
+from pawcare.services.pet_models import PetRecord
+from pawcare.services.pet_repository import PetRepository
 
 
 class PetMessageService:
@@ -100,10 +12,10 @@ class PetMessageService:
     def __init__(
         self,
         *,
-        repository: PetRepository | None = None,
+        repository: PetRepository,
         log_processing_service: LogProcessingService | None = None,
     ) -> None:
-        self.repository = repository or InMemoryPetRepository()
+        self.repository = repository
         self.log_processing_service = log_processing_service or LogProcessingService()
 
     def process_message(

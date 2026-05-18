@@ -11,11 +11,8 @@ from pawcare.schemas.state import (
     HealthBaseline,
     Observation,
 )
-from pawcare.services.pet_message_service import (
-    PetRecord,
-    PetRecordAccessError,
-    UserAccount,
-)
+from pawcare.services.pet_models import PetRecord, UserAccount
+from pawcare.services.pet_repository import PetRecordAccessError
 
 
 class SQLitePetRepository:
