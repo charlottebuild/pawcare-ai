@@ -875,9 +875,13 @@ Required fields:
 `PetRecord` is product-layer state. It should not contain internal `agent_outputs`,
 `proposed_update`, `safety_review`, or transient `active_context` objects.
 
-### 15.3 InMemoryPetRepository
+### 15.3 PetRepository Contract
 
-For v1, the repository may be in-memory while preserving a database-shaped interface. It should support:
+For v1, repository implementations may be in-memory or SQLite-backed while preserving the same
+application-facing interface. This lets `PetMessageService` and API routes use either storage
+implementation without changing message-processing behavior.
+
+Required repository methods:
 
 - create a user-owned pet record
 - list pet records for a user
@@ -886,6 +890,21 @@ For v1, the repository may be in-memory while preserving a database-shaped inter
 
 Repository reads must not return pets owned by another user. Missing or unauthorized pet access should
 return a clear product-layer error and must not create an implicit pet record.
+
+`create_pet` is an upsert for profile and baseline state. If the same `user_id` and `pet_id` already
+exist, the stored `dog_profile`, `behavioral_baseline`, and `health_baseline` should be replaced by the
+incoming `PetRecord`.
+
+`append_observations` is the normal way to add new observations during message processing. Product
+message handling must append observations from `log_result.coordinator_result.state.observations`, not
+from response text.
+
+If a repository auto-creates a missing user while creating a pet, it must not overwrite existing user
+metadata such as `display_name` or `email` with empty values.
+
+If `create_pet` is called with an existing pet and an explicit `PetRecord.observations` list, stored
+observations should match that incoming pet record after the upsert. This prevents duplicate observation
+history when tests, seed scripts, or import flows recreate a pet record.
 
 ### 15.4 Message Processing Boundary
 

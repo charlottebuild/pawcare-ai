@@ -1,7 +1,12 @@
 from fastapi.testclient import TestClient
 
 from pawcare.api import create_app
-from pawcare.services import InMemoryPetRepository, PetRecord, UserAccount
+from pawcare.services import (
+    InMemoryPetRepository,
+    PetRecord,
+    SQLitePetRepository,
+    UserAccount,
+)
 from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline
 
 
@@ -221,3 +226,35 @@ def test_basic_validation_rejects_blank_pet_id_raw_text_and_invalid_timestamp() 
     assert blank_text_response.status_code == 422
     assert bad_timestamp_response.status_code == 422
     assert blank_create_pet_response.status_code == 422
+
+
+def test_api_can_use_sqlite_repository_for_persistent_observations(tmp_path) -> None:
+    db_path = tmp_path / "pawcare.sqlite3"
+    client = TestClient(create_app(repository=SQLitePetRepository(db_path)))
+    response = client.post(
+        "/v1/users",
+        json={"user_id": "user_123", "display_name": "Charlotte"},
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets",
+        json=_pet_payload(pet_id="dog_mochi", name="Mochi"),
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi barely touched breakfast.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+            "workflow_id": "wf_api_sqlite_001",
+        },
+    )
+    assert response.status_code == 200
+
+    reopened_client = TestClient(create_app(repository=SQLitePetRepository(db_path)))
+    response = reopened_client.get("/v1/users/user_123/pets/dog_mochi/observations")
+    observations = response.json()["observations"]
+
+    assert response.status_code == 200
+    assert len(observations) == 1
+    assert observations[0]["category"] == "food_intake"

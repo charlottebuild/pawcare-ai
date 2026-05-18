@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Protocol
 
 from pawcare.schemas.state import (
     BehavioralBaseline,
@@ -31,6 +32,24 @@ class PetRecord:
     behavioral_baseline: BehavioralBaseline
     health_baseline: HealthBaseline
     observations: list[Observation] = field(default_factory=list)
+
+
+class PetRepository(Protocol):
+    def create_user(self, user: UserAccount) -> UserAccount: ...
+
+    def create_pet(self, pet: PetRecord) -> PetRecord: ...
+
+    def list_pets(self, *, user_id: str) -> list[PetRecord]: ...
+
+    def get_pet(self, *, user_id: str, pet_id: str) -> PetRecord: ...
+
+    def append_observations(
+        self,
+        *,
+        user_id: str,
+        pet_id: str,
+        observations: list[Observation],
+    ) -> PetRecord: ...
 
 
 class InMemoryPetRepository:
@@ -81,7 +100,7 @@ class PetMessageService:
     def __init__(
         self,
         *,
-        repository: InMemoryPetRepository | None = None,
+        repository: PetRepository | None = None,
         log_processing_service: LogProcessingService | None = None,
     ) -> None:
         self.repository = repository or InMemoryPetRepository()

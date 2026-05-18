@@ -7,8 +7,10 @@ from pawcare.services.pet_message_service import (
     PetMessageService,
     PetRecord,
     PetRecordAccessError,
+    PetRepository,
     UserAccount,
 )
+from pawcare.storage import SQLitePetRepository
 
 __all__ = [
     "InMemoryPetRepository",
@@ -17,5 +19,7 @@ __all__ = [
     "PetMessageService",
     "PetRecord",
     "PetRecordAccessError",
+    "PetRepository",
+    "SQLitePetRepository",
     "UserAccount",
 ]

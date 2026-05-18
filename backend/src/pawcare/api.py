@@ -13,6 +13,7 @@ from pawcare.services import (
     PetMessageService,
     PetRecord,
     PetRecordAccessError,
+    PetRepository,
     UserAccount,
 )
 
@@ -67,7 +68,7 @@ class CreateMessageRequest(BaseModel):
         return timestamp
 
 
-def create_app(repository: InMemoryPetRepository | None = None) -> FastAPI:
+def create_app(repository: PetRepository | None = None) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
     app = FastAPI(title="PawCare AI API", version="0.1.0")
@@ -157,7 +158,7 @@ def _validate_pet_id(pet_id: str) -> str:
 
 def _get_accessible_pet(
     *,
-    repository: InMemoryPetRepository,
+    repository: PetRepository,
     user_id: str,
     pet_id: str,
 ) -> PetRecord:
