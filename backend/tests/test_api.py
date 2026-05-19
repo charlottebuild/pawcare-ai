@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from pawcare.api import create_app
+from pawcare.api import create_app, create_local_app
 from pawcare.services import (
     InMemoryPetRepository,
     PetRecord,
@@ -21,6 +21,7 @@ def _pet_payload(pet_id: str, name: str) -> dict[str, object]:
             "id": pet_id,
             "name": name,
             "species": "dog",
+            "care_notes": ["avatar:collie"],
         },
         "behavioral_baseline": {
             "general_temperament": "food_motivated",
@@ -69,6 +70,52 @@ def test_health_endpoint_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_root_redirects_to_local_app() -> None:
+    client = _client()
+
+    response = client.get("/", follow_redirects=False)
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "/app"
+
+
+def test_local_app_page_and_static_assets_are_served() -> None:
+    client = _client()
+
+    page_response = client.get("/app")
+    js_response = client.get("/app/static/app.js")
+    css_response = client.get("/app/static/app.css")
+
+    assert page_response.status_code == 200
+    assert "PawCare" in page_response.text
+    assert "/app/static/app.js" in page_response.text
+    assert "User ID" not in page_response.text
+    assert "Pet ID" not in page_response.text
+    assert "Add pet" in page_response.text
+    assert "Add Observation" in page_response.text
+    assert "Save Observation" in page_response.text
+    assert "Type a message..." in page_response.text
+    assert "Modify Care Plan" in page_response.text
+    assert "Modify" in page_response.text
+    assert "Potty time" in page_response.text
+    assert "Potty before bed" in page_response.text
+    assert "Afternoon activity" in page_response.text
+    assert "Morning walk" in page_response.text
+    assert "Add medication" in page_response.text
+    assert "Use local photo" in page_response.text
+    assert "Health baseline" in page_response.text
+    assert js_response.status_code == 200
+    assert "sendPetMessage" in js_response.text
+    assert "duplicateMealWarning" in js_response.text
+    assert "avatar_image" in js_response.text
+    assert "addMedicationField" in js_response.text
+    assert "Pet profile" not in js_response.text
+    assert css_response.status_code == 200
+    assert ".app-shell" in css_response.text
+    assert ".chat-bubble" in css_response.text
+    assert ".observation-types" in css_response.text
+
+
 def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
     client = _client()
 
@@ -81,15 +128,49 @@ def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
             {
                 "pet_id": "dog_mochi",
                 "name": "Mochi",
+                "avatar": "collie",
+                "avatar_image": None,
                 "observation_count": 0,
             },
             {
                 "pet_id": "dog_bear",
                 "name": "Bear",
+                "avatar": "collie",
+                "avatar_image": None,
                 "observation_count": 0,
             },
         ]
     }
+
+
+def test_create_user_can_derive_user_id_from_email() -> None:
+    client = _client()
+
+    response = client.post(
+        "/v1/users",
+        json={"display_name": "Charlotte", "email": "charlotte@example.com"},
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["user_id"] == "user_charlotte_example_com"
+    assert body["display_name"] == "Charlotte"
+    assert body["email"] == "charlotte@example.com"
+
+
+def test_create_pet_can_derive_pet_id_from_profile_id() -> None:
+    client = _client()
+    response = client.post("/v1/users", json={"user_id": "user_123"})
+    assert response.status_code == 200
+
+    payload = _pet_payload(pet_id="dog_system_generated", name="Mochi")
+    payload.pop("pet_id")
+    response = client.post("/v1/users/user_123/pets", json=payload)
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["pet_id"] == "dog_system_generated"
+    assert body["dog_profile"]["id"] == "dog_system_generated"
 
 
 def test_get_one_pet_returns_detail_without_internal_agent_state() -> None:
@@ -135,6 +216,34 @@ def test_observations_start_empty_then_reflect_message_processing() -> None:
 
     bear_response = client.get("/v1/users/user_123/pets/dog_bear")
     assert bear_response.json()["observation_count"] == 0
+
+
+def test_update_pet_profile_preserves_existing_observations() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi barely touched breakfast.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+            "workflow_id": "wf_api_update_pet_001",
+        },
+    )
+    assert response.status_code == 200
+
+    payload = _pet_payload(pet_id="dog_mochi", name="Mochi Updated")
+    payload["dog_profile"]["breed"] = "Border Collie"
+    payload["health_baseline"]["normal_appetite"] = "picky"
+    response = client.patch("/v1/users/user_123/pets/dog_mochi", json=payload)
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["dog_profile"]["name"] == "Mochi Updated"
+    assert body["health_baseline"]["normal_appetite"] == "picky"
+    assert body["observation_count"] == 1
+
+    response = client.get("/v1/users/user_123/pets/dog_mochi/observations")
+    assert len(response.json()["observations"]) == 1
 
 
 def test_high_risk_message_returns_safe_user_response_only() -> None:
@@ -258,3 +367,40 @@ def test_api_can_use_sqlite_repository_for_persistent_observations(tmp_path) -> 
     assert response.status_code == 200
     assert len(observations) == 1
     assert observations[0]["category"] == "food_intake"
+
+
+def test_create_local_app_uses_sqlite_persistence(tmp_path) -> None:
+    db_path = tmp_path / "pawcare.local.sqlite3"
+    client = TestClient(create_local_app(db_path=db_path))
+
+    response = client.post(
+        "/v1/users",
+        json={"user_id": "user_123", "display_name": "Charlotte"},
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets",
+        json=_pet_payload(pet_id="dog_mochi", name="Mochi"),
+    )
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi barely touched breakfast.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+            "workflow_id": "wf_local_app_001",
+        },
+    )
+    assert response.status_code == 200
+
+    reopened_client = TestClient(create_local_app(db_path=db_path))
+    response = reopened_client.get("/v1/users/user_123/pets")
+    assert response.status_code == 200
+    assert response.json()["pets"][0]["observation_count"] == 1
+
+    response = reopened_client.get("/v1/users/user_123/pets/dog_mochi/observations")
+    observations = response.json()["observations"]
+
+    assert response.status_code == 200
+    assert len(observations) == 1
+    assert observations[0]["raw_text"] == "Mochi barely touched breakfast."

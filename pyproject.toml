@@ -12,7 +12,14 @@ dependencies = [
 dev = [
   "httpx>=0.27,<1",
   "pytest>=8,<9",
+  "uvicorn>=0.29,<1",
 ]
+
+[tool.setuptools]
+package-dir = {"" = "backend/src"}
+
+[tool.setuptools.packages.find]
+where = ["backend/src"]
 
 [tool.pytest.ini_options]
 testpaths = ["backend/tests"]

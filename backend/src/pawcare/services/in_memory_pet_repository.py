@@ -22,6 +22,12 @@ class InMemoryPetRepository:
         self._pets[(pet.user_id, pet.pet_id)] = pet
         return pet
 
+    def update_pet(self, pet: PetRecord) -> PetRecord:
+        current = self.get_pet(user_id=pet.user_id, pet_id=pet.pet_id)
+        pet.observations = list(current.observations)
+        self._pets[(pet.user_id, pet.pet_id)] = pet
+        return pet
+
     def list_pets(self, *, user_id: str) -> list[PetRecord]:
         return [
             pet

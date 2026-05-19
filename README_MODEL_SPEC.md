@@ -75,7 +75,15 @@ PYTHONPATH=backend/src python -m pawcare.demo "Mochi barely touched breakfast."
 
 The demo seeds one user with two pets, sends a message for `dog_mochi`, returns the safe user-facing response, and reports which observations were stored.
 
-The FastAPI app factory is available at `pawcare.api:create_app`. The API currently uses an in-memory repository and is intended for local/friend testing, not production deployment.
+Run the local app with SQLite persistence:
+
+```bash
+uvicorn --factory pawcare.api:create_local_app --reload
+```
+
+Then open `http://127.0.0.1:8000/app`. The local app stores users, pet profiles, and observations in `pawcare.local.sqlite3` so friend-testing data survives process restarts.
+
+The FastAPI app factory is available at `pawcare.api:create_app`. That default factory still uses an in-memory repository for tests and demos; `create_local_app` is the local/friend-testing entrypoint.
 
 ---
 

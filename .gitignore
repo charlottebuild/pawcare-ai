@@ -23,3 +23,7 @@ build/
 htmlcov/
 .coverage
 coverage.xml
+
+# Local PawCare app data
+pawcare.local.sqlite3
+pawcare.local.sqlite3-*

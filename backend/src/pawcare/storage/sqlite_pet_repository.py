@@ -84,6 +84,27 @@ class SQLitePetRepository:
                 )
         return self.get_pet(user_id=pet.user_id, pet_id=pet.pet_id)
 
+    def update_pet(self, pet: PetRecord) -> PetRecord:
+        self.get_pet(user_id=pet.user_id, pet_id=pet.pet_id)
+        with self._connect() as connection:
+            connection.execute(
+                """
+                update pets
+                set dog_profile_json = ?,
+                    behavioral_baseline_json = ?,
+                    health_baseline_json = ?
+                where user_id = ? and pet_id = ?
+                """,
+                (
+                    self._to_json(pet.dog_profile.model_dump()),
+                    self._to_json(pet.behavioral_baseline.model_dump()),
+                    self._to_json(pet.health_baseline.model_dump()),
+                    pet.user_id,
+                    pet.pet_id,
+                ),
+            )
+        return self.get_pet(user_id=pet.user_id, pet_id=pet.pet_id)
+
     def list_pets(self, *, user_id: str) -> list[PetRecord]:
         with self._connect() as connection:
             rows = connection.execute(

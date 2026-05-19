@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
+import re
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline
@@ -14,25 +18,38 @@ from pawcare.services import (
     PetRecord,
     PetRecordAccessError,
     PetRepository,
+    SQLitePetRepository,
     UserAccount,
 )
 
 
 class CreateUserRequest(BaseModel):
-    user_id: str
+    user_id: str | None = None
     display_name: str | None = None
     email: str | None = None
 
+    @field_validator("user_id")
+    @classmethod
+    def user_id_is_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        user_id = value.strip()
+        if not user_id:
+            raise ValueError("user_id must not be blank")
+        return user_id
+
 
 class CreatePetRequest(BaseModel):
-    pet_id: str
+    pet_id: str | None = None
     dog_profile: DogProfile
     behavioral_baseline: BehavioralBaseline = Field(default_factory=BehavioralBaseline)
     health_baseline: HealthBaseline = Field(default_factory=HealthBaseline)
 
     @field_validator("pet_id")
     @classmethod
-    def pet_id_is_not_blank(cls, value: str) -> str:
+    def pet_id_is_not_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
         pet_id = value.strip()
         if not pet_id:
             raise ValueError("pet_id must not be blank")
@@ -72,16 +89,26 @@ def create_app(repository: PetRepository | None = None) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
     app = FastAPI(title="PawCare AI API", version="0.1.0")
+    _mount_web_app(app)
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/", include_in_schema=False)
+    def root() -> RedirectResponse:
+        return RedirectResponse(url="/app")
+
+    @app.get("/app", include_in_schema=False)
+    def local_app() -> FileResponse:
+        return FileResponse(_web_dir() / "index.html")
+
     @app.post("/v1/users")
     def create_user(request: CreateUserRequest) -> dict[str, Any]:
+        user_id = _resolve_user_id(request)
         user = pet_repository.create_user(
             UserAccount(
-                user_id=request.user_id,
+                user_id=user_id,
                 display_name=request.display_name,
                 email=request.email,
             )
@@ -90,15 +117,35 @@ def create_app(repository: PetRepository | None = None) -> FastAPI:
 
     @app.post("/v1/users/{user_id}/pets")
     def create_pet(user_id: str, request: CreatePetRequest) -> dict[str, Any]:
+        pet_id = _resolve_pet_id(request)
         pet = pet_repository.create_pet(
             PetRecord(
-                pet_id=request.pet_id,
+                pet_id=pet_id,
                 user_id=user_id,
-                dog_profile=request.dog_profile,
+                dog_profile=request.dog_profile.model_copy(update={"id": pet_id}),
                 behavioral_baseline=request.behavioral_baseline,
                 health_baseline=request.health_baseline,
             )
         )
+        return _pet_detail(pet)
+
+    @app.patch("/v1/users/{user_id}/pets/{pet_id}")
+    def update_pet(user_id: str, pet_id: str, request: CreatePetRequest) -> dict[str, Any]:
+        normalized_pet_id = _validate_pet_id(pet_id)
+        try:
+            pet = pet_repository.update_pet(
+                PetRecord(
+                    pet_id=normalized_pet_id,
+                    user_id=user_id,
+                    dog_profile=request.dog_profile.model_copy(
+                        update={"id": normalized_pet_id}
+                    ),
+                    behavioral_baseline=request.behavioral_baseline,
+                    health_baseline=request.health_baseline,
+                )
+            )
+        except PetRecordAccessError as exc:
+            raise _pet_not_found() from exc
         return _pet_detail(pet)
 
     @app.get("/v1/users/{user_id}/pets")
@@ -149,11 +196,37 @@ def create_app(repository: PetRepository | None = None) -> FastAPI:
     return app
 
 
+def create_local_app(db_path: str | Path = "pawcare.local.sqlite3") -> FastAPI:
+    return create_app(repository=SQLitePetRepository(db_path))
+
+
 def _validate_pet_id(pet_id: str) -> str:
     normalized = pet_id.strip()
     if not normalized:
         raise HTTPException(status_code=422, detail="pet_id must not be blank")
     return normalized
+
+
+def _resolve_pet_id(request: CreatePetRequest) -> str:
+    candidate = request.pet_id if request.pet_id is not None else request.dog_profile.id
+    return _validate_pet_id(candidate)
+
+
+def _resolve_user_id(request: CreateUserRequest) -> str:
+    if request.user_id is not None:
+        return request.user_id
+    seed = request.email or request.display_name
+    if not seed:
+        raise HTTPException(
+            status_code=422,
+            detail="email or display_name is required",
+        )
+    return f"user_{_slugify(seed)}"
+
+
+def _slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    return slug[:48] or "workspace"
 
 
 def _get_accessible_pet(
@@ -176,6 +249,8 @@ def _pet_summary(pet: PetRecord) -> dict[str, Any]:
     return {
         "pet_id": pet.pet_id,
         "name": pet.dog_profile.name,
+        "avatar": _pet_avatar(pet),
+        "avatar_image": _pet_avatar_image(pet),
         "observation_count": len(pet.observations),
     }
 
@@ -189,3 +264,29 @@ def _pet_detail(pet: PetRecord) -> dict[str, Any]:
         "health_baseline": jsonable_encoder(pet.health_baseline),
         "observation_count": len(pet.observations),
     }
+
+
+def _pet_avatar(pet: PetRecord) -> str | None:
+    for note in pet.dog_profile.care_notes:
+        if note.startswith("avatar:"):
+            return note.removeprefix("avatar:")
+    return None
+
+
+def _pet_avatar_image(pet: PetRecord) -> str | None:
+    for note in pet.dog_profile.care_notes:
+        if note.startswith("avatar_image:"):
+            return note.removeprefix("avatar_image:")
+    return None
+
+
+def _mount_web_app(app: FastAPI) -> None:
+    app.mount(
+        "/app/static",
+        StaticFiles(directory=_web_dir()),
+        name="pawcare_app_static",
+    )
+
+
+def _web_dir() -> Path:
+    return Path(__file__).parent / "web"
