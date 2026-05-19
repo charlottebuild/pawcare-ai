@@ -81,6 +81,12 @@ class CommunicationAgent:
         risk_assessment: RiskAssessment,
         owner_preferences: OwnerContactPreferences | None,
     ) -> str:
+        if (
+            "GL_ACL_POSTOP_001" in risk_assessment.source_guideline_ids
+            and any("rehabilitation difficulty" in factor for factor in risk_assessment.risk_factors)
+        ):
+            return self._post_op_rehab_message(risk_assessment)
+
         tone = owner_preferences.tone_preference if owner_preferences else None
         prefix = "Quick update:"
         if tone == "calm_and_brief":
@@ -103,3 +109,24 @@ class CommunicationAgent:
             )
 
         return f"{prefix} {observed} {urgency}{escalation}"
+
+    def _post_op_rehab_message(self, risk_assessment: RiskAssessment) -> str:
+        escalation = ""
+        if risk_assessment.escalation_conditions:
+            escalation = (
+                " Please check with the surgical veterinarian if "
+                + ", ".join(risk_assessment.escalation_conditions[-1:])
+                + ", or if the prescribed exercises still cannot be done."
+            )
+
+        return (
+            "Quick update: I reviewed the post-op recovery and lameness guidance linked to "
+            "GL_ACL_POSTOP_001 and GL_LAMENESS_001. This sounds like difficulty with prescribed "
+            "rehab exercises rather than a simple status update. Keep following the veterinarian's "
+            "specific exercise plan, but make the session easier: try very short sets, use a small "
+            "treat to guide the movement, keep him calm and distracted, and choose a time when he "
+            "seems more comfortable. If the vet has already approved warm or cold compresses, doing "
+            "the exercise after the painful period settles may help him tolerate it better. Do not "
+            "force through struggling or pain."
+            + escalation
+        )

@@ -95,6 +95,31 @@ def test_extracts_acl_postop_non_weight_bearing_mobility_observation() -> None:
     ]
 
 
+def test_extracts_rehab_exercise_reluctance_as_mobility_observation() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text=(
+            "The doctor wants exercises twice a day. His leg has more strength now, "
+            "but he hates the exercise and struggles."
+        ),
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    assert len(batch.observations) == 1
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.mobility
+    assert observation.health_context == {
+        "mobility": "limping",
+        "weight_bearing": "partial_weight_bearing",
+        "post_op_context": True,
+        "rehab_exercise": True,
+    }
+    assert observation.source_guideline_ids == [
+        "GL_LAMENESS_001",
+        "GL_ACL_POSTOP_001",
+    ]
+
+
 def test_extracts_black_tarry_stool_as_high_severity() -> None:
     batch = LogExtractor().extract(
         dog_id="dog_123",

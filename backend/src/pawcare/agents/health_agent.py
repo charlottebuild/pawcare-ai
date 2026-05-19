@@ -104,6 +104,8 @@ class HealthAgent:
                     signals.add("non_weight_bearing")
                 if context.get("post_op_context"):
                     signals.add("acl_surgery")
+                if context.get("rehab_exercise"):
+                    signals.add("rehab_exercise")
             if observation.category == ObservationCategory.medication_note:
                 if context.get("nsaid_or_pain_med_context"):
                     signals.add("medication_use")
@@ -121,7 +123,7 @@ class HealthAgent:
             guideline_ids.append("GL_LETHARGY_001")
         if signals & {"limping", "non_weight_bearing"}:
             guideline_ids.append("GL_LAMENESS_001")
-        if signals & {"acl_surgery", "non_weight_bearing"}:
+        if signals & {"acl_surgery", "non_weight_bearing", "rehab_exercise"}:
             guideline_ids.append("GL_ACL_POSTOP_001")
         if "medication_use" in signals and signals & {
             "vomiting",
@@ -142,7 +144,7 @@ class HealthAgent:
             missing.update({"stool_frequency", "vomiting_status", "energy_level"})
         if "vomiting" in signals:
             missing.update({"vomiting_frequency", "water_intake", "stool_status"})
-        if signals & {"limping", "non_weight_bearing", "acl_surgery"}:
+        if signals & {"limping", "non_weight_bearing", "acl_surgery", "rehab_exercise"}:
             missing.update({"affected_limb", "pain_signs", "incision_status", "activity_level"})
         return sorted(missing)
 
@@ -153,6 +155,8 @@ class HealthAgent:
             return "high digestive risk profile", "blood or black/tarry stool reported", 0.86
         if "acl_surgery" in signals and "non_weight_bearing" in signals:
             return "high post-op mobility concern", "post-op non-weight-bearing or severe mobility change", 0.86
+        if "rehab_exercise" in signals and "acl_surgery" in signals:
+            return "moderate post-op rehab concern", "post-op rehabilitation difficulty or exercise reluctance", 0.8
         if "vomiting" in signals and ("watery_diarrhea" in signals or "decreased_activity" in signals):
             return "high combined health risk profile", "vomiting combined with diarrhea or decreased activity", 0.84
         if "low_appetite" in signals:

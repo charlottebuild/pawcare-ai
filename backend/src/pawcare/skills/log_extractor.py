@@ -337,6 +337,19 @@ class LogExtractor:
         mobility_terms = [
             "limp",
             "limping",
+            "leg",
+            "back leg",
+            "hind leg",
+            "strength",
+            "exercise",
+            "exercice",
+            "rehab",
+            "rehabilitation",
+            "physical therapy",
+            "struggle",
+            "reluctant",
+            "doctor wants",
+            "vet wants",
             "won't put",
             "cannot put",
             "not putting",
@@ -352,6 +365,11 @@ class LogExtractor:
             "不负重",
             "脚不着地",
             "手术",
+            "康复",
+            "复健",
+            "锻炼",
+            "运动",
+            "不愿意",
         ]
         if not self._contains_any(text, mobility_terms):
             return None
@@ -369,12 +387,32 @@ class LogExtractor:
                 "脚不着地",
             ],
         )
-        post_op_context = self._contains_any(text, ["acl", "ccl", "tplo", "tta", "surgery", "post-op", "术后", "手术"])
+        rehab_context = self._contains_any(
+            text,
+            [
+                "exercise",
+                "exercice",
+                "rehab",
+                "rehabilitation",
+                "physical therapy",
+                "doctor wants",
+                "vet wants",
+                "康复",
+                "复健",
+                "锻炼",
+            ],
+        )
+        post_op_context = self._contains_any(
+            text,
+            ["acl", "ccl", "tplo", "tta", "surgery", "post-op", "术后", "手术"],
+        ) or (rehab_context and self._contains_any(text, ["leg", "recover", "strength", "腿"]))
         context = {
             "mobility": "limping",
             "weight_bearing": "non_weight_bearing" if non_weight_bearing else "partial_weight_bearing",
             "post_op_context": post_op_context,
         }
+        if rehab_context:
+            context["rehab_exercise"] = True
 
         return self._base_observation(
             sequence=sequence,

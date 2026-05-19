@@ -119,3 +119,29 @@ def test_service_returns_escalate_for_acl_postop_non_weight_bearing() -> None:
     assert result.response.risk_band == "high"
     assert "post-op non-weight-bearing" in result.response.message
     assert "GL_ACL_POSTOP_001" in result.response.source_guideline_ids
+
+
+def test_service_returns_rehab_guidance_for_postop_exercise_reluctance() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_006",
+        dog_id="dog_123",
+        raw_text=(
+            "The doctor wants to do some exercise for him twice a day. The first week he was not "
+            "reluctant, but this week his leg may recover a little bit and has more strength. "
+            "He hates the exercise and struggles. What can I do?"
+        ),
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "post-op recovery and lameness guidance" in result.response.message
+    assert "prescribed rehab exercises" in result.response.message
+    assert "treat" in result.response.message
+    assert "warm or cold compresses" in result.response.message
+    assert "surgical veterinarian" in result.response.message
+    assert "GL_ACL_POSTOP_001" in result.response.source_guideline_ids
+    assert "dose" not in result.response.message.lower()
