@@ -19,6 +19,7 @@ from pawcare.services import (
     PetRecordAccessError,
     PetRepository,
     SQLitePetRepository,
+    SimilarCaseService,
     UserAccount,
 )
 
@@ -85,9 +86,26 @@ class CreateMessageRequest(BaseModel):
         return timestamp
 
 
-def create_app(repository: PetRepository | None = None) -> FastAPI:
+class RelatedCasesRequest(BaseModel):
+    raw_text: str
+    limit: int = Field(default=3, ge=1, le=5)
+
+    @field_validator("raw_text")
+    @classmethod
+    def raw_text_is_not_blank(cls, value: str) -> str:
+        raw_text = value.strip()
+        if not raw_text:
+            raise ValueError("raw_text must not be blank")
+        return raw_text
+
+
+def create_app(
+    repository: PetRepository | None = None,
+    similar_case_service: SimilarCaseService | None = None,
+) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
+    case_service = similar_case_service or SimilarCaseService()
     app = FastAPI(title="PawCare AI API", version="0.1.0")
     _mount_web_app(app)
 
@@ -175,6 +193,31 @@ def create_app(repository: PetRepository | None = None) -> FastAPI:
             ]
         }
 
+    @app.post("/v1/users/{user_id}/pets/{pet_id}/related-cases")
+    def find_related_cases(
+        user_id: str,
+        pet_id: str,
+        request: RelatedCasesRequest,
+    ) -> dict[str, Any]:
+        pet = _get_accessible_pet(
+            repository=pet_repository,
+            user_id=user_id,
+            pet_id=_validate_pet_id(pet_id),
+        )
+        matches = case_service.find_matches(
+            raw_text=request.raw_text,
+            pet=pet,
+            recent_observations=pet.observations,
+            limit=request.limit,
+        )
+        return {
+            "disclaimer": (
+                "Similar cases are supporting context, not a diagnosis. Discuss concerning "
+                "signs with a veterinarian."
+            ),
+            "related_cases": case_service.as_payload(matches),
+        }
+
     @app.post("/v1/users/{user_id}/pets/{pet_id}/messages")
     def create_message(
         user_id: str,
@@ -249,6 +292,7 @@ def _pet_summary(pet: PetRecord) -> dict[str, Any]:
     return {
         "pet_id": pet.pet_id,
         "name": pet.dog_profile.name,
+        "species": pet.dog_profile.species,
         "avatar": _pet_avatar(pet),
         "avatar_image": _pet_avatar_image(pet),
         "observation_count": len(pet.observations),
