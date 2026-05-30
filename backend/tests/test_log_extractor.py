@@ -39,6 +39,31 @@ def test_extracts_food_intake_and_missing_information() -> None:
     assert batch.missing_information == ["energy_level", "water_intake"]
 
 
+def test_extracts_did_not_have_breakfast_as_food_intake() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Heidou didn't have breakfast this morning.",
+        timestamp="2026-05-08T08:00:00-07:00",
+        species=Species.dog,
+    )
+
+    assert batch.observations[0].category == ObservationCategory.food_intake
+    assert batch.observations[0].health_context == {"food_intake": "low"}
+
+
+def test_extracts_throw_up_as_vomiting() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Heidou did not have breakfast and did throw up this morning.",
+        timestamp="2026-05-08T08:00:00-07:00",
+        species=Species.dog,
+    )
+
+    categories = [observation.category for observation in batch.observations]
+    assert ObservationCategory.food_intake in categories
+    assert ObservationCategory.vomiting in categories
+
+
 def test_extracts_multiple_observations_from_mixed_health_and_behavior_text() -> None:
     batch = LogExtractor().extract(
         dog_id="dog_123",
@@ -118,6 +143,97 @@ def test_extracts_rehab_exercise_reluctance_as_mobility_observation() -> None:
         "GL_LAMENESS_001",
         "GL_ACL_POSTOP_001",
     ]
+
+
+def test_extracts_gi_condition_triage_signals() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Mochi is vomiting and has diarrhea. Is it gastroenteritis or parvo?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    triage = next(
+        observation
+        for observation in batch.observations
+        if (observation.health_context or {}).get("condition_triage")
+    )
+    assert triage.category == ObservationCategory.stool
+    assert triage.health_context["condition_domain"] == "gi"
+    assert triage.health_context["asked_condition"] == "gastroenteritis"
+    assert "GL_CONDITION_GI_001" in triage.source_guideline_ids
+
+
+def test_extracts_oral_neck_mass_condition_triage_signals() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="He is drooling and has a soft lump under his jaw. Could it be salivary mucocele?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.other
+    assert observation.health_context["condition_domain"] == "oral_neck"
+    assert observation.health_context["asked_condition"] == "salivary mucocele"
+    assert "salivary mucocele" in observation.health_context["possible_categories"]
+    assert "GL_CONDITION_ORAL_NECK_001" in observation.source_guideline_ids
+
+
+def test_extracts_urinary_red_flag_condition_triage_signals() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="He keeps straining and cannot pee. Could it be a UTI?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.urination
+    assert observation.health_context["condition_domain"] == "urinary"
+    assert observation.health_context["urinary_obstruction"] is True
+
+
+def test_extracts_cat_no_urination_all_day_as_urinary_red_flag() -> None:
+    batch = LogExtractor().extract(
+        dog_id="cat_niaoniao",
+        raw_text="NiaoNiao couldn't pee today, she didn't pee all day.",
+        timestamp="2026-05-08T20:00:00-07:00",
+        species=Species.cat,
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.urination
+    assert observation.species == Species.cat
+    assert observation.health_context["condition_domain"] == "urinary"
+    assert observation.health_context["urinary_obstruction"] is True
+    assert observation.health_context["urgent_red_flag"] is True
+
+
+def test_extracts_mistyped_couldnt_pee_as_urinary_red_flag() -> None:
+    batch = LogExtractor().extract(
+        dog_id="cat_niaoniao",
+        raw_text="niao niao couldnt' pee today,all day long ,is there any problem ?",
+        timestamp="2026-05-08T20:00:00-07:00",
+        species=Species.cat,
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.urination
+    assert observation.health_context["urinary_obstruction"] is True
+    assert observation.health_context["urgent_red_flag"] is True
+    assert observation.health_context["urgent_red_flag"] is True
+
+
+def test_extracts_respiratory_red_flag_condition_triage_signals() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Mochi is coughing and breathing hard. What might this be?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.other
+    assert observation.health_context["condition_domain"] == "respiratory"
+    assert observation.health_context["respiratory_distress"] is True
+    assert observation.health_context["urgent_red_flag"] is True
 
 
 def test_extracts_black_tarry_stool_as_high_severity() -> None:

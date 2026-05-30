@@ -1,9 +1,13 @@
-from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline
+from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline, Species
 from pawcare.services import LogProcessingService
 
 
 def _dog_profile() -> DogProfile:
     return DogProfile(id="dog_123", name="Mochi", species="dog")
+
+
+def _cat_profile() -> DogProfile:
+    return DogProfile(id="cat_niaoniao", name="NiaoNiao", species="cat")
 
 
 def _behavioral_baseline() -> BehavioralBaseline:
@@ -145,3 +149,119 @@ def test_service_returns_rehab_guidance_for_postop_exercise_reluctance() -> None
     assert "surgical veterinarian" in result.response.message
     assert "GL_ACL_POSTOP_001" in result.response.source_guideline_ids
     assert "dose" not in result.response.message.lower()
+
+
+def test_service_returns_non_diagnostic_gi_condition_triage() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_007",
+        dog_id="dog_123",
+        raw_text="Mochi is vomiting and has diarrhea. Is it gastroenteritis or parvo?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "I can't diagnose from the app" in result.response.message
+    assert "Possible categories to discuss with a veterinarian" in result.response.message
+    assert "gastroenteritis" in result.response.message
+    assert "parvo" not in result.response.message.lower() or "This is parvo" not in result.response.message
+    assert "GL_CONDITION_GI_001" in result.response.source_guideline_ids
+    assert "has gastroenteritis" not in result.response.message.lower()
+
+
+def test_service_returns_oral_neck_mass_triage_with_salivary_mucocele_direction() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_008",
+        dog_id="dog_123",
+        raw_text="He is drooling and has a soft lump under his jaw. Could it be salivary mucocele?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "I can't diagnose from the app" in result.response.message
+    assert "salivary mucocele" in result.response.message
+    assert "dental or oral disease" in result.response.message
+    assert "What to record before the visit" in result.response.message
+    assert "GL_CONDITION_ORAL_NECK_001" in result.response.source_guideline_ids
+    assert "has salivary mucocele" not in result.response.message.lower()
+
+
+def test_service_escalates_urinary_obstruction_triage() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_009",
+        dog_id="dog_123",
+        raw_text="He keeps straining and cannot pee. Could it be a UTI?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "escalate"
+    assert result.response.risk_band == "high"
+    assert "urgent red flags" in result.response.message
+    assert "cannot urinate" in result.response.message
+    assert "GL_CONDITION_URINARY_001" in result.response.source_guideline_ids
+    assert "has uti" not in result.response.message.lower()
+
+
+def test_service_escalates_cat_no_urination_all_day() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_cat_urinary_001",
+        dog_id="cat_niaoniao",
+        raw_text="NiaoNiao couldn't pee today, she didn't pee all day. What happened?",
+        timestamp="2026-05-08T20:00:00-07:00",
+        dog_profile=_cat_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+        species=Species.cat,
+    )
+
+    assert result.response.status == "escalate"
+    assert result.response.risk_band == "high"
+    assert "urinary blockage" in result.response.message
+    assert "cannot urinate" in result.response.message
+    assert "GL_CONDITION_URINARY_001" in result.response.source_guideline_ids
+
+
+def test_service_escalates_mistyped_cat_couldnt_pee_question() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_cat_urinary_002",
+        dog_id="cat_niaoniao",
+        raw_text="niao niao couldnt' pee today,all day long ,is there any problem ?",
+        timestamp="2026-05-08T20:00:00-07:00",
+        dog_profile=_cat_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+        species=Species.cat,
+    )
+
+    assert result.response.status == "escalate"
+    assert result.response.risk_band == "high"
+    assert "urinary blockage" in result.response.message
+    assert "GL_CONDITION_URINARY_001" in result.response.source_guideline_ids
+
+
+def test_service_escalates_respiratory_distress_triage() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_010",
+        dog_id="dog_123",
+        raw_text="Mochi is coughing and breathing hard. What might this be?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "escalate"
+    assert result.response.risk_band == "high"
+    assert "urgent red flags" in result.response.message
+    assert "breathing" in result.response.message
+    assert "GL_CONDITION_RESPIRATORY_001" in result.response.source_guideline_ids

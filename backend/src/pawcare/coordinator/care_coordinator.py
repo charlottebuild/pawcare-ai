@@ -26,6 +26,7 @@ from pawcare.skills import LogExtractor
 HEALTH_OBSERVATION_CATEGORIES = {
     "food_intake",
     "stool",
+    "urination",
     "vomiting",
     "energy",
     "mobility",
@@ -160,6 +161,7 @@ class CareCoordinator:
             observation.observation_id
             for observation in state.observations
             if observation.category in HEALTH_OBSERVATION_CATEGORIES
+            or (observation.health_context or {}).get("condition_triage")
         ]
 
         return ActiveContext(
@@ -178,6 +180,12 @@ class CareCoordinator:
                 "GL_LAMENESS_001",
                 "GL_NSAID_SIDE_EFFECT_001",
                 "GL_ACL_POSTOP_001",
+                "GL_CONDITION_GI_001",
+                "GL_CONDITION_ORAL_NECK_001",
+                "GL_CONDITION_MOBILITY_001",
+                "GL_CONDITION_SKIN_LUMP_001",
+                "GL_CONDITION_URINARY_001",
+                "GL_CONDITION_RESPIRATORY_001",
             ],
             required_output_path="agent_outputs",
             must_answer=[
@@ -356,6 +364,40 @@ class CareCoordinator:
 
     def _escalation_conditions_from_agent_output(self, output: AgentOutput) -> list[str]:
         if output.agent == "HealthAgent":
+            guideline_ids = set(output.source_guideline_ids)
+            if "GL_CONDITION_RESPIRATORY_001" in guideline_ids:
+                return [
+                    "breathing becomes labored or difficult",
+                    "gums look blue or pale",
+                    "collapse or severe weakness appears",
+                    "coughing or breathing effort worsens",
+                ]
+            if "GL_CONDITION_URINARY_001" in guideline_ids:
+                return [
+                    "the pet cannot urinate",
+                    "the pet repeatedly strains with little or no urine",
+                    "blood in urine appears or worsens",
+                    "pain, vomiting, or low energy appears",
+                ]
+            if "GL_CONDITION_ORAL_NECK_001" in guideline_ids:
+                return [
+                    "swelling grows quickly",
+                    "trouble swallowing, eating, or breathing appears",
+                    "drooling, bleeding, severe pain, or low energy worsens",
+                ]
+            if "GL_CONDITION_SKIN_LUMP_001" in guideline_ids:
+                return [
+                    "the lump grows quickly",
+                    "bleeding, discharge, pain, or heat appears",
+                    "the pet seems unwell or very itchy",
+                ]
+            if "GL_CONDITION_GI_001" in guideline_ids:
+                return [
+                    "vomiting repeats or worsens",
+                    "diarrhea becomes bloody or black/tarry",
+                    "energy drops or the pet refuses food or water",
+                    "signs continue or worsen",
+                ]
             return [
                 "vomiting repeats or worsens",
                 "bloody or black/tarry stool appears",

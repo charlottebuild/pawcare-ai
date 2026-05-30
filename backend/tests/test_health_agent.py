@@ -13,6 +13,10 @@ def _active_context() -> ActiveContext:
             "GL_NSAID_SIDE_EFFECT_001",
             "GL_ACL_POSTOP_001",
             "GL_LAMENESS_001",
+            "GL_CONDITION_GI_001",
+            "GL_CONDITION_ORAL_NECK_001",
+            "GL_CONDITION_URINARY_001",
+            "GL_CONDITION_RESPIRATORY_001",
         ],
     )
 
@@ -71,3 +75,21 @@ def test_health_agent_flags_low_appetite_as_moderate_concern() -> None:
     assert output.proposed_update is not None
     assert output.proposed_update.value == "appetite below baseline or expected intake"
     assert "GL_APPETITE_002" in output.source_guideline_ids
+
+
+def test_health_agent_flags_condition_triage_question() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="He is drooling and has a soft lump under his jaw. Could it be salivary mucocele?",
+        timestamp="2026-05-08T08:00:00-07:00",
+    )
+
+    output = HealthAgent().analyze(
+        active_context=_active_context(),
+        observations=batch.observations,
+    )
+
+    assert output.conclusion == "moderate oral or neck condition triage concern"
+    assert output.proposed_update is not None
+    assert output.proposed_update.value == "oral or neck swelling needs veterinary evaluation"
+    assert "GL_CONDITION_ORAL_NECK_001" in output.source_guideline_ids

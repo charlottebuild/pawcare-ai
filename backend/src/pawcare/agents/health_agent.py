@@ -26,15 +26,19 @@ class HealthAgent:
         health_observations = [
             observation
             for observation in observations
-            if observation.category
-            in {
-                ObservationCategory.food_intake,
-                ObservationCategory.stool,
-                ObservationCategory.vomiting,
-                ObservationCategory.energy,
-                ObservationCategory.mobility,
-                ObservationCategory.medication_note,
-            }
+            if (
+                observation.category
+                in {
+                    ObservationCategory.food_intake,
+                    ObservationCategory.stool,
+                    ObservationCategory.vomiting,
+                    ObservationCategory.energy,
+                    ObservationCategory.mobility,
+                    ObservationCategory.medication_note,
+                }
+                or observation.category == ObservationCategory.urination
+                or (observation.health_context or {}).get("condition_triage")
+            )
         ]
 
         if not health_observations:
@@ -109,6 +113,18 @@ class HealthAgent:
             if observation.category == ObservationCategory.medication_note:
                 if context.get("nsaid_or_pain_med_context"):
                     signals.add("medication_use")
+            if context.get("condition_triage"):
+                domain = context.get("condition_domain")
+                if domain:
+                    signals.add(f"condition_{domain}")
+                if context.get("urgent_red_flag"):
+                    signals.add("condition_urgent_red_flag")
+                if context.get("urinary_obstruction"):
+                    signals.add("urinary_obstruction")
+                if context.get("respiratory_distress"):
+                    signals.add("respiratory_distress")
+                if context.get("asked_condition"):
+                    signals.add("asked_specific_condition")
         return signals
 
     def _guideline_ids_from_signals(self, signals: set[str]) -> list[str]:
@@ -125,6 +141,18 @@ class HealthAgent:
             guideline_ids.append("GL_LAMENESS_001")
         if signals & {"acl_surgery", "non_weight_bearing", "rehab_exercise"}:
             guideline_ids.append("GL_ACL_POSTOP_001")
+        if "condition_gi" in signals:
+            guideline_ids.append("GL_CONDITION_GI_001")
+        if "condition_oral_neck" in signals:
+            guideline_ids.append("GL_CONDITION_ORAL_NECK_001")
+        if "condition_mobility" in signals:
+            guideline_ids.append("GL_CONDITION_MOBILITY_001")
+        if "condition_skin_lump" in signals:
+            guideline_ids.append("GL_CONDITION_SKIN_LUMP_001")
+        if "condition_urinary" in signals:
+            guideline_ids.append("GL_CONDITION_URINARY_001")
+        if "condition_respiratory" in signals:
+            guideline_ids.append("GL_CONDITION_RESPIRATORY_001")
         if "medication_use" in signals and signals & {
             "vomiting",
             "watery_diarrhea",
@@ -146,6 +174,8 @@ class HealthAgent:
             missing.update({"vomiting_frequency", "water_intake", "stool_status"})
         if signals & {"limping", "non_weight_bearing", "acl_surgery", "rehab_exercise"}:
             missing.update({"affected_limb", "pain_signs", "incision_status", "activity_level"})
+        if any(signal.startswith("condition_") for signal in signals):
+            missing.update({"duration", "severity_change", "photos_or_video", "vet_visit_context"})
         return sorted(missing)
 
     def _conclusion(self, signals: set[str]) -> tuple[str, str, float]:
@@ -155,8 +185,22 @@ class HealthAgent:
             return "high digestive risk profile", "blood or black/tarry stool reported", 0.86
         if "acl_surgery" in signals and "non_weight_bearing" in signals:
             return "high post-op mobility concern", "post-op non-weight-bearing or severe mobility change", 0.86
+        if "respiratory_distress" in signals:
+            return "high respiratory triage concern", "respiratory red flags need urgent veterinary triage", 0.88
+        if "urinary_obstruction" in signals:
+            return "high urinary triage concern", "possible urinary blockage red flags need urgent veterinary triage", 0.88
         if "rehab_exercise" in signals and "acl_surgery" in signals:
             return "moderate post-op rehab concern", "post-op rehabilitation difficulty or exercise reluctance", 0.8
+        if "condition_oral_neck" in signals:
+            return "moderate oral or neck condition triage concern", "oral or neck swelling needs veterinary evaluation", 0.8
+        if "condition_gi" in signals:
+            return "moderate GI condition triage concern", "possible GI condition discussion needed", 0.78
+        if "condition_skin_lump" in signals:
+            return "moderate skin or lump condition triage concern", "skin or lump changes need veterinary discussion", 0.76
+        if "condition_urinary" in signals:
+            return "moderate urinary condition triage concern", "urinary signs need veterinary discussion", 0.8
+        if "condition_respiratory" in signals:
+            return "moderate respiratory condition triage concern", "respiratory signs need veterinary discussion", 0.8
         if "vomiting" in signals and ("watery_diarrhea" in signals or "decreased_activity" in signals):
             return "high combined health risk profile", "vomiting combined with diarrhea or decreased activity", 0.84
         if "low_appetite" in signals:
