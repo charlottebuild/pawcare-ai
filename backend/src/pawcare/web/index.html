@@ -83,6 +83,13 @@
             Name
             <input id="pet-name" name="name" required autocomplete="off" />
           </label>
+          <label>
+            Species
+            <select id="species" name="species">
+              <option value="dog">Dog</option>
+              <option value="cat">Cat</option>
+            </select>
+          </label>
           <fieldset>
             <legend>Avatar</legend>
             <div class="avatar-picker">
@@ -241,8 +248,8 @@
             </div>
             <div class="quick-actions">
               <button id="quick-add-observation" class="secondary-button" type="button" disabled>Add Observation</button>
-              <button class="secondary-button" type="button" data-view="care">Care Plan</button>
               <button class="secondary-button" type="button" data-view="timeline">Timeline</button>
+              <button class="secondary-button" type="button" data-view="care">Care Plan</button>
             </div>
             <form id="message-form" class="chat-composer" hidden>
               <button id="composer-add-observation" class="secondary-button icon-button" type="button">+</button>

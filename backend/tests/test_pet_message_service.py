@@ -113,6 +113,38 @@ def test_pet_message_service_records_safe_update_without_internal_fields() -> No
     assert "agent_outputs" not in response.model_dump()
 
 
+def test_pet_message_service_dedupes_same_day_same_meal_but_keeps_new_symptoms() -> None:
+    service, repository = _service_with_two_pets()
+
+    service.process_message(
+        user_id="user_123",
+        pet_id="dog_mochi",
+        raw_text="Mochi didn't have breakfast this morning.",
+        timestamp="2026-05-08T08:00:00-07:00",
+        workflow_id="wf_product_dedupe_001",
+    )
+    service.process_message(
+        user_id="user_123",
+        pet_id="dog_mochi",
+        raw_text="Mochi didn't have breakfast this morning.",
+        timestamp="2026-05-08T09:00:00-07:00",
+        workflow_id="wf_product_dedupe_002",
+    )
+    service.process_message(
+        user_id="user_123",
+        pet_id="dog_mochi",
+        raw_text="Mochi didn't have breakfast and did throw up this morning.",
+        timestamp="2026-05-08T10:00:00-07:00",
+        workflow_id="wf_product_dedupe_003",
+    )
+
+    mochi = repository.get_pet(user_id="user_123", pet_id="dog_mochi")
+    categories = [observation.category for observation in mochi.observations]
+
+    assert categories.count(ObservationCategory.food_intake) == 1
+    assert ObservationCategory.vomiting in categories
+
+
 def test_pet_message_service_returns_escalate_for_high_risk_health_update() -> None:
     service, repository = _service_with_two_pets()
 

@@ -92,9 +92,12 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "User ID" not in page_response.text
     assert "Pet ID" not in page_response.text
     assert "Add pet" in page_response.text
+    assert "Species" in page_response.text
+    assert "Cat" in page_response.text
     assert "Add Observation" in page_response.text
     assert "Save Observation" in page_response.text
     assert "Type a message..." in page_response.text
+    assert page_response.text.index("Timeline") < page_response.text.index("Care Plan")
     assert "Modify Care Plan" in page_response.text
     assert "Modify" in page_response.text
     assert "Potty time" in page_response.text
@@ -107,13 +110,25 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert js_response.status_code == 200
     assert "sendPetMessage" in js_response.text
     assert "duplicateMealWarning" in js_response.text
+    assert "pendingDuplicateMeal" in js_response.text
+    assert "renderBreedOptions" in js_response.text
+    assert "Domestic Shorthair" in js_response.text
     assert "avatar_image" in js_response.text
     assert "addMedicationField" in js_response.text
+    assert "fetchRelatedCases" in js_response.text
+    assert "Similar cases" in js_response.text
+    assert "_has_triage_intent" not in js_response.text
+    assert "selectPet(state.pets[0].pet_id)" in js_response.text
+    assert "focusComposer" in js_response.text
+    assert "pawcareWorkspaceV1" in js_response.text
+    assert "restoreWorkspaceSession" in js_response.text
+    assert "saveWorkspaceSession" in js_response.text
     assert "Pet profile" not in js_response.text
     assert css_response.status_code == 200
     assert ".app-shell" in css_response.text
     assert ".chat-bubble" in css_response.text
     assert ".observation-types" in css_response.text
+    assert ".observation-item-header" in css_response.text
 
 
 def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
@@ -128,6 +143,7 @@ def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
             {
                 "pet_id": "dog_mochi",
                 "name": "Mochi",
+                "species": "dog",
                 "avatar": "collie",
                 "avatar_image": None,
                 "observation_count": 0,
@@ -135,6 +151,7 @@ def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
             {
                 "pet_id": "dog_bear",
                 "name": "Bear",
+                "species": "dog",
                 "avatar": "collie",
                 "avatar_image": None,
                 "observation_count": 0,
@@ -171,6 +188,35 @@ def test_create_pet_can_derive_pet_id_from_profile_id() -> None:
     assert response.status_code == 200
     assert body["pet_id"] == "dog_system_generated"
     assert body["dog_profile"]["id"] == "dog_system_generated"
+
+
+def test_create_cat_pet_preserves_species_and_cat_breed() -> None:
+    client = _client()
+    response = client.post("/v1/users", json={"user_id": "user_123"})
+    assert response.status_code == 200
+
+    response = client.post(
+        "/v1/users/user_123/pets",
+        json={
+            "pet_id": "cat_niaoniao",
+            "dog_profile": {
+                "id": "cat_niaoniao",
+                "name": "NiaoNiao",
+                "species": "cat",
+                "breed": "Domestic Shorthair",
+                "care_notes": ["avatar:cat"],
+            },
+            "behavioral_baseline": {},
+            "health_baseline": {},
+        },
+    )
+    detail = response.json()
+    list_response = client.get("/v1/users/user_123/pets")
+
+    assert response.status_code == 200
+    assert detail["dog_profile"]["species"] == "cat"
+    assert detail["dog_profile"]["breed"] == "Domestic Shorthair"
+    assert list_response.json()["pets"][0]["species"] == "cat"
 
 
 def test_get_one_pet_returns_detail_without_internal_agent_state() -> None:
@@ -270,6 +316,86 @@ def test_high_risk_message_returns_safe_user_response_only() -> None:
     assert "agent_outputs" not in body
     assert "proposed_update" not in body
     assert "safety_review" not in body
+
+
+def test_related_cases_endpoint_returns_supporting_context_for_target_pet() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/related-cases",
+        json={
+            "raw_text": (
+                "Mochi pulls his head back when eating, drools, and has a small "
+                "lump under the tongue. Could it be salivary mucocele?"
+            )
+        },
+    )
+
+    body = response.json()
+    first = body["related_cases"][0]
+    assert response.status_code == 200
+    assert "not a diagnosis" in body["disclaimer"].lower()
+    assert first["case_id"] == "case_oral_neck_001"
+    assert first["source_url"].startswith("https://")
+    assert "salivary_gland" in first["possible_discussion_topics"]
+    assert first["condition_discussion_priority"] in {
+        "discuss_soon",
+        "discuss_if_persistent",
+    }
+    assert "full_text" not in first
+    assert "raw_text" not in first
+
+
+def test_related_cases_do_not_change_high_risk_message_escalation() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    message_response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi cannot pee and has blood in urine.",
+            "timestamp": "2026-05-08T09:15:00-07:00",
+            "workflow_id": "wf_api_cases_001",
+        },
+    )
+    cases_response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/related-cases",
+        json={"raw_text": "Mochi cannot pee and has blood in urine. Should I worry?"},
+    )
+
+    assert message_response.status_code == 200
+    assert message_response.json()["status"] == "escalate"
+    assert cases_response.status_code == 200
+    assert cases_response.json()["related_cases"][0]["case_id"] == "case_urinary_001"
+
+
+def test_related_cases_missing_or_unauthorized_pet_returns_generic_404() -> None:
+    repository = InMemoryPetRepository()
+    repository.create_user(UserAccount(user_id="user_123"))
+    repository.create_user(UserAccount(user_id="user_456"))
+    repository.create_pet(
+        PetRecord(
+            pet_id="dog_luna",
+            user_id="user_456",
+            dog_profile=DogProfile(id="dog_luna", name="Luna", species="dog"),
+            behavioral_baseline=BehavioralBaseline(),
+            health_baseline=HealthBaseline(),
+        )
+    )
+    client = TestClient(create_app(repository=repository))
+
+    missing_response = client.post(
+        "/v1/users/user_123/pets/dog_missing/related-cases",
+        json={"raw_text": "limping after surgery"},
+    )
+    unauthorized_response = client.post(
+        "/v1/users/user_123/pets/dog_luna/related-cases",
+        json={"raw_text": "limping after surgery"},
+    )
+
+    assert missing_response.status_code == 404
+    assert unauthorized_response.status_code == 404
 
 
 def test_missing_or_unauthorized_pet_returns_generic_404_without_appending() -> None:

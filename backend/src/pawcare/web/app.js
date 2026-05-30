@@ -1,3 +1,5 @@
+const workspaceStorageKey = "pawcareWorkspaceV1";
+
 const state = {
   userId: "",
   displayName: "",
@@ -10,6 +12,7 @@ const state = {
   chatByPetId: {},
   carePlanByPetId: {},
   pendingAvatarImage: "",
+  pendingDuplicateMeal: "",
 };
 
 const elements = {
@@ -38,6 +41,8 @@ const elements = {
   medicationFields: document.querySelector("#medication-fields"),
   routineList: document.querySelector("#routine-list"),
   medicationList: document.querySelector("#medication-list"),
+  speciesInput: document.querySelector("#species"),
+  breedInput: document.querySelector("#breed"),
   avatarImageInput: document.querySelector("#avatar-image"),
   avatarImagePreview: document.querySelector("#avatar-image-preview"),
   navItems: document.querySelectorAll("[data-view]"),
@@ -78,25 +83,21 @@ elements.userForm.addEventListener("submit", async (event) => {
       email: email,
     },
   });
-  state.userId = user.user_id;
-  state.displayName = user.display_name || user.email || "there";
+  applyWorkspaceSession(user);
   state.selectedPetId = "";
   state.observations = [];
   state.chatByPetId = {};
   state.carePlanByPetId = {};
-  elements.userForm.hidden = true;
-  elements.petProfilePanel.hidden = true;
-  elements.assistantCard.disabled = false;
-  elements.addPetButton.disabled = false;
-  elements.quickAddObservation.disabled = true;
-  elements.refreshButton.disabled = false;
-  elements.homeTitle.textContent = `Hi, ${state.displayName}`;
-  elements.connectionStatus.textContent = "How is your pet doing today?";
+  saveWorkspaceSession();
   await loadPets();
 });
 
 elements.navItems.forEach((item) => {
   item.addEventListener("click", () => setView(item.dataset.view));
+});
+
+elements.speciesInput.addEventListener("change", () => {
+  renderBreedOptions(elements.speciesInput.value, "");
 });
 
 elements.assistantCard.addEventListener("click", () => {
@@ -184,6 +185,7 @@ function openObservationForm() {
   }
   elements.observationForm.reset();
   elements.duplicateWarning.hidden = true;
+  state.pendingDuplicateMeal = "";
   setView("observe");
   document.querySelector("#observation-details").focus();
 }
@@ -226,7 +228,7 @@ elements.petForm.addEventListener("submit", async (event) => {
     body: {
       dog_profile: {
         id: targetPetId,
-        species: "dog",
+        species: textValue(form, "species") || "dog",
         name: petName,
         breed: nullableText(form, "breed"),
         age_years: nullableNumber(form, "age_years"),
@@ -264,7 +266,7 @@ elements.messageForm.addEventListener("submit", async (event) => {
   addChatMessage("user", rawText);
   const response = await sendPetMessage(rawText);
   elements.messageForm.reset();
-  renderResponse(response);
+  await renderResponse(response, rawText);
   await loadPets();
   await loadObservations();
 });
@@ -282,7 +284,8 @@ elements.observationForm.addEventListener("submit", async (event) => {
     return;
   }
   const duplicate = duplicateMealWarning(details);
-  if (duplicate && elements.duplicateWarning.hidden) {
+  if (duplicate && state.pendingDuplicateMeal !== duplicate) {
+    state.pendingDuplicateMeal = duplicate;
     elements.duplicateWarning.textContent = duplicate;
     elements.duplicateWarning.hidden = false;
     return;
@@ -290,9 +293,10 @@ elements.observationForm.addEventListener("submit", async (event) => {
   const rawText = `${details} Category: ${textValue(form, "category")}. Severity: ${textValue(form, "severity")}.`;
   addChatMessage("user", details);
   const response = await sendPetMessage(rawText);
-  renderResponse(response);
+  await renderResponse(response, rawText);
   elements.observationForm.reset();
   elements.duplicateWarning.hidden = true;
+  state.pendingDuplicateMeal = "";
   await loadPets();
   await loadObservations();
   setView("timeline");
@@ -312,19 +316,84 @@ async function loadPets() {
   const result = await api(`/v1/users/${encodeURIComponent(state.userId)}/pets`);
   state.pets = result.pets;
   updateSummary();
-  renderPets();
   if (!state.pets.some((pet) => pet.pet_id === state.selectedPetId)) {
     state.selectedPetId = "";
+    state.selectedPetDetail = null;
+    if (state.pets.length) {
+      await selectPet(state.pets[0].pet_id);
+      return;
+    }
     renderSelectedPet();
+    return;
   }
+  renderPets();
 }
 
 async function selectPet(petId) {
   state.selectedPetId = petId;
+  saveWorkspaceSession();
   await loadPetDetail();
   renderSelectedPet();
   await loadObservations();
   setView("home");
+  focusComposer();
+}
+
+function applyWorkspaceSession(user) {
+  state.userId = user.user_id;
+  state.displayName = user.display_name || user.email || "there";
+  elements.userForm.hidden = true;
+  elements.petProfilePanel.hidden = true;
+  elements.assistantCard.disabled = false;
+  elements.addPetButton.disabled = false;
+  elements.quickAddObservation.disabled = !state.selectedPetId;
+  elements.refreshButton.disabled = false;
+  elements.homeTitle.textContent = `Hi, ${state.displayName}`;
+  elements.connectionStatus.textContent = "How is your pet doing today?";
+}
+
+function saveWorkspaceSession() {
+  if (!state.userId) {
+    return;
+  }
+  localStorage.setItem(
+    workspaceStorageKey,
+    JSON.stringify({
+      user_id: state.userId,
+      display_name: state.displayName,
+      selected_pet_id: state.selectedPetId,
+    }),
+  );
+}
+
+async function restoreWorkspaceSession() {
+  renderBreedOptions("dog", "");
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(workspaceStorageKey) || "null");
+  } catch {
+    saved = null;
+  }
+  if (!saved?.user_id) {
+    return;
+  }
+  state.selectedPetId = saved.selected_pet_id || "";
+  applyWorkspaceSession({
+    user_id: saved.user_id,
+    display_name: saved.display_name,
+  });
+  try {
+    await loadPets();
+  } catch {
+    localStorage.removeItem(workspaceStorageKey);
+    state.userId = "";
+    state.displayName = "";
+    state.selectedPetId = "";
+    elements.userForm.hidden = false;
+    elements.assistantCard.disabled = true;
+    elements.addPetButton.disabled = true;
+    elements.refreshButton.disabled = true;
+  }
 }
 
 async function loadPetDetail() {
@@ -366,6 +435,24 @@ async function sendPetMessage(rawText) {
   );
 }
 
+async function fetchRelatedCases(rawText) {
+  if (!state.userId || !state.selectedPetId || !rawText) {
+    return { disclaimer: "", related_cases: [] };
+  }
+  return api(
+    `/v1/users/${encodeURIComponent(state.userId)}/pets/${encodeURIComponent(
+      state.selectedPetId,
+    )}/related-cases`,
+    {
+      method: "POST",
+      body: {
+        raw_text: rawText,
+        limit: 3,
+      },
+    },
+  );
+}
+
 function renderPets() {
   elements.petList.innerHTML = "";
   if (!state.pets.length) {
@@ -388,7 +475,7 @@ function renderPets() {
       <span class="pet-avatar ${avatarClass(pet.avatar)}" aria-hidden="true"></span>
       <span class="pet-card-body">
         <strong>${escapeHtml(pet.name || pet.pet_id)}</strong>
-        <span class="pet-card-meta">Dog · Last check-in ${pet.observation_count ? "today" : "not yet"}</span>
+        <span class="pet-card-meta">${escapeHtml(speciesLabel(pet.species))} · Last check-in ${pet.observation_count ? "today" : "not yet"}</span>
         <span class="pet-status ${statusClass}">${statusText}</span>
       </span>
     `;
@@ -413,12 +500,24 @@ function renderSelectedPet() {
   renderChat();
 }
 
+function focusComposer() {
+  if (!state.selectedPetId || elements.messageForm.hidden) {
+    return;
+  }
+  const input = elements.messageForm.elements.raw_text;
+  if (input) {
+    input.focus();
+  }
+}
+
 function openPetFormForCreate() {
   state.petFormMode = "create";
   elements.petForm.reset();
   state.pendingAvatarImage = "";
   elements.avatarImagePreview.textContent = "No photo selected";
   elements.avatarImagePreview.style.backgroundImage = "";
+  setFormValue("species", "dog");
+  renderBreedOptions("dog", "");
   elements.petFormTitle.textContent = "Add pet";
   elements.petFormSubmit.textContent = "Save profile";
   elements.petProfilePanel.hidden = false;
@@ -440,7 +539,8 @@ function openPetFormForEdit() {
   elements.petFormSubmit.textContent = "Update profile";
   setFormValue("name", detail.dog_profile.name || "");
   setFormValue("avatar", avatarFromCareNotes(detail.dog_profile.care_notes));
-  setFormValue("breed", detail.dog_profile.breed || "");
+  setFormValue("species", detail.dog_profile.species || "dog");
+  renderBreedOptions(detail.dog_profile.species || "dog", detail.dog_profile.breed || "");
   setFormValue("age_years", String(detail.dog_profile.age_years || ""));
   setFormValue("weight_kg", String(detail.dog_profile.weight_kg || ""));
   setFormValue("normal_appetite", detail.health_baseline.normal_appetite || "unknown");
@@ -494,7 +594,7 @@ function currentPet() {
   return state.pets.find((candidate) => candidate.pet_id === state.selectedPetId);
 }
 
-function renderResponse(response) {
+async function renderResponse(response, rawText = "") {
   const meta = [
     response.risk_band ? `Risk: ${response.risk_band}` : "",
     response.source_guideline_ids?.length
@@ -504,7 +604,15 @@ function renderResponse(response) {
       ? `Escalation: ${response.escalation_conditions.join("; ")}`
       : "",
   ].filter(Boolean);
-  addChatMessage("assistant", response.message, response.status, meta);
+  const relatedCases = await fetchRelatedCases(rawText);
+  addChatMessage(
+    "assistant",
+    response.message,
+    response.status,
+    meta,
+    relatedCases.related_cases || [],
+    relatedCases.disclaimer || "",
+  );
 }
 
 function renderChat() {
@@ -535,7 +643,10 @@ function renderObservations(observations) {
       const item = document.createElement("article");
       item.className = "observation-item";
       item.innerHTML = `
-        <strong>${labelForCategory(observation.category)}</strong>
+        <div class="observation-item-header">
+          <strong>${labelForCategory(observation.category)}</strong>
+          <span>${escapeHtml(timeLabel(observation.timestamp))}</span>
+        </div>
         <p>${escapeHtml(observation.raw_text || "")}</p>
         <span class="pet-status ${statusClassForObservation(observation)}">${statusTextForObservation(observation)}</span>
       `;
@@ -556,8 +667,51 @@ function renderProfile(pet) {
   setAvatarImage(elements.profileAvatar, pet?.avatar_image);
   elements.profilePetName.textContent = pet ? pet.name || pet.pet_id : "No pet selected";
   elements.profilePetMeta.textContent = pet
-    ? `Dog · ${pet.observation_count} observations`
+    ? `${speciesLabel(pet.species)} · ${pet.observation_count} observations`
     : "Choose a pet from Home.";
+}
+
+function renderBreedOptions(species, selectedBreed = "") {
+  const optionsBySpecies = {
+    dog: [
+      ["", "Unknown / mixed"],
+      ["Border Collie", "Border Collie"],
+      ["Golden Retriever", "Golden Retriever"],
+      ["Labrador Retriever", "Labrador Retriever"],
+      ["Poodle", "Poodle"],
+      ["French Bulldog", "French Bulldog"],
+      ["German Shepherd", "German Shepherd"],
+      ["Corgi", "Corgi"],
+      ["Dachshund", "Dachshund"],
+      ["Shiba Inu", "Shiba Inu"],
+      ["Other", "Other"],
+    ],
+    cat: [
+      ["", "Unknown / mixed"],
+      ["Domestic Shorthair", "Domestic Shorthair"],
+      ["Domestic Longhair", "Domestic Longhair"],
+      ["British Shorthair", "British Shorthair"],
+      ["American Shorthair", "American Shorthair"],
+      ["Ragdoll", "Ragdoll"],
+      ["Siamese", "Siamese"],
+      ["Maine Coon", "Maine Coon"],
+      ["Persian", "Persian"],
+      ["Sphynx", "Sphynx"],
+      ["Other", "Other"],
+    ],
+  };
+  const options = optionsBySpecies[species] || optionsBySpecies.dog;
+  elements.breedInput.innerHTML = options
+    .map(
+      ([value, label]) =>
+        `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`,
+    )
+    .join("");
+  elements.breedInput.value = selectedBreed;
+}
+
+function speciesLabel(species) {
+  return species === "cat" ? "Cat" : "Dog";
 }
 
 function renderCarePlan() {
@@ -874,9 +1028,16 @@ function showNotice(message) {
   addChatMessage("assistant", message, "notice", []);
 }
 
-function addChatMessage(role, message, status = "", meta = []) {
+function addChatMessage(
+  role,
+  message,
+  status = "",
+  meta = [],
+  relatedCases = [],
+  caseDisclaimer = "",
+) {
   const chat = messagesForCurrentPet();
-  const chatMessage = { role, message, status, meta };
+  const chatMessage = { role, message, status, meta, relatedCases, caseDisclaimer };
   chat.push(chatMessage);
   appendChatBubble(chatMessage);
   elements.chatThread.scrollTop = elements.chatThread.scrollHeight;
@@ -900,7 +1061,14 @@ function messagesForCurrentPet() {
   return state.chatByPetId[key];
 }
 
-function appendChatBubble({ role, message, status = "", meta = [] }) {
+function appendChatBubble({
+  role,
+  message,
+  status = "",
+  meta = [],
+  relatedCases = [],
+  caseDisclaimer = "",
+}) {
   const item = document.createElement("article");
   item.className = `chat-bubble ${role}`;
   if (role === "assistant") {
@@ -911,12 +1079,53 @@ function appendChatBubble({ role, message, status = "", meta = [] }) {
         ${status ? `<span class="status-pill ${escapeHtml(status)}">${escapeHtml(status)}</span>` : ""}
         <p>${escapeHtml(message)}</p>
         ${meta.length ? `<ul>${meta.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>` : ""}
+        ${renderRelatedCasesMarkup(relatedCases, caseDisclaimer)}
       </div>
     `;
   } else {
     item.innerHTML = `<p>${escapeHtml(message)}</p>`;
   }
   elements.chatThread.append(item);
+}
+
+function renderRelatedCasesMarkup(relatedCases = [], disclaimer = "") {
+  if (!relatedCases.length) {
+    return "";
+  }
+  return `
+    <section class="related-cases" aria-label="Similar cases">
+      <div class="related-cases-header">
+        <strong>Similar cases</strong>
+        <span>Not a diagnosis</span>
+      </div>
+      ${disclaimer ? `<p class="case-disclaimer">${escapeHtml(disclaimer)}</p>` : ""}
+      <div class="case-card-list">
+        ${relatedCases.map((item) => renderRelatedCaseCard(item)).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderRelatedCaseCard(item) {
+  const topics = item.possible_discussion_topics || [];
+  const redFlags = item.red_flags || [];
+  const symptoms = item.matched_symptoms || [];
+  return `
+    <article class="case-card">
+      <div class="case-card-topline">
+        <span>${escapeHtml(item.case_relevance_level || "related")} relevance</span>
+        <span>${escapeHtml(item.condition_discussion_priority || "discussion topic")}</span>
+      </div>
+      <h4>${escapeHtml(item.title || "Related pet case")}</h4>
+      <p>${escapeHtml(item.case_summary || "")}</p>
+      ${symptoms.length ? `<p><strong>Matched signs:</strong> ${escapeHtml(symptoms.join(", "))}</p>` : ""}
+      ${topics.length ? `<p><strong>Vet discussion topics:</strong> ${escapeHtml(topics.join(", "))}</p>` : ""}
+      ${redFlags.length ? `<p><strong>Watch urgently for:</strong> ${escapeHtml(redFlags.slice(0, 3).join("; "))}</p>` : ""}
+      <a href="${escapeAttribute(item.source_url || "#")}" target="_blank" rel="noopener noreferrer">
+        Open original source
+      </a>
+    </article>
+  `;
 }
 
 function duplicateMealWarning(details) {
@@ -1005,3 +1214,13 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
+
+function escapeAttribute(value) {
+  const candidate = String(value || "");
+  if (!candidate.startsWith("https://") && !candidate.startsWith("http://")) {
+    return "#";
+  }
+  return escapeHtml(candidate);
+}
+
+restoreWorkspaceSession();

@@ -630,6 +630,66 @@ p {
   font-size: 0.84rem;
 }
 
+.related-cases {
+  display: grid;
+  gap: 9px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.related-cases-header,
+.case-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.related-cases-header strong {
+  font-size: 0.92rem;
+}
+
+.related-cases-header span,
+.case-card-topline span,
+.case-disclaimer {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+}
+
+.case-card-list {
+  display: grid;
+  gap: 8px;
+}
+
+.case-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #ded6f6;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fbf9ff, #ffffff);
+  padding: 11px;
+}
+
+.case-card h4 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.case-card p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.38;
+}
+
+.case-card a {
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+
 .quick-actions {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -851,6 +911,20 @@ p {
 
 .observation-item strong {
   overflow-wrap: anywhere;
+}
+
+.observation-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.observation-item-header span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  white-space: nowrap;
 }
 
 .care-plan-panel,
