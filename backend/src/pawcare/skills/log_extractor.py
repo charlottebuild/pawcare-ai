@@ -25,6 +25,12 @@ from pawcare.schemas.state import (
     Species,
     VocalizationSignal,
 )
+from pawcare.skills.symptom_understanding import (
+    TRIAGE_INTENT_TERMS,
+    URINARY_OBSTRUCTION_TERMS,
+    contains_any,
+    normalize_user_text,
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +55,7 @@ class LogExtractor:
         species: Species = Species.dog,
         source: Source = Source.user_log,
     ) -> ExtractedObservationBatch:
-        text = raw_text.lower()
+        text = normalize_user_text(raw_text)
         observations: list[Observation] = []
         missing_information: list[str] = []
 
@@ -557,20 +563,7 @@ class LogExtractor:
         )
 
     def _condition_domain(self, text: str) -> str | None:
-        has_question_intent = self._contains_any(
-            text,
-            [
-                "could it be",
-                "is it",
-                "might this be",
-                "what might",
-                "what can it be",
-                "会不会是",
-                "可能是",
-                "是不是",
-                "什么病",
-            ],
-        )
+        has_question_intent = self._contains_any(text, TRIAGE_INTENT_TERMS)
         domains = [
             ("respiratory", ["cough", "coughing", "breathing", "breath", "wheezing", "喘", "咳", "呼吸"]),
             ("urinary", ["urine", "pee", "peeing", "urinate", "urinating", "blood in urine", "尿", "尿血"]),
@@ -676,32 +669,7 @@ class LogExtractor:
         ]
 
     def _urinary_obstruction_terms(self) -> list[str]:
-        return [
-            "can't pee",
-            "cant pee",
-            "couldn't pee",
-            "couldnt' pee",
-            "couldnt pee",
-            "cannot pee",
-            "didn't pee",
-            "did not pee",
-            "no pee",
-            "no urine",
-            "not peeing",
-            "cannot urinate",
-            "can't urinate",
-            "couldn't urinate",
-            "didn't urinate",
-            "straining",
-            "little or no urine",
-            "didn't pee all day",
-            "did not pee all day",
-            "all day long",
-            "尿不出",
-            "没尿",
-            "一天没尿",
-            "没有尿",
-        ]
+        return URINARY_OBSTRUCTION_TERMS
 
     def _record_fields(self, domain: str) -> list[str]:
         return {
@@ -933,4 +901,4 @@ class LogExtractor:
         return values
 
     def _contains_any(self, text: str, terms: Iterable[str]) -> bool:
-        return any(term in text for term in terms)
+        return contains_any(text, terms)

@@ -208,17 +208,18 @@ def test_extracts_cat_no_urination_all_day_as_urinary_red_flag() -> None:
 
 
 def test_extracts_mistyped_couldnt_pee_as_urinary_red_flag() -> None:
+    raw_text = "niao niao couldnt' pee today,all day long ,is there any problem ?"
     batch = LogExtractor().extract(
         dog_id="cat_niaoniao",
-        raw_text="niao niao couldnt' pee today,all day long ,is there any problem ?",
+        raw_text=raw_text,
         timestamp="2026-05-08T20:00:00-07:00",
         species=Species.cat,
     )
 
     observation = batch.observations[0]
     assert observation.category == ObservationCategory.urination
+    assert observation.raw_text == raw_text
     assert observation.health_context["urinary_obstruction"] is True
-    assert observation.health_context["urgent_red_flag"] is True
     assert observation.health_context["urgent_red_flag"] is True
 
 

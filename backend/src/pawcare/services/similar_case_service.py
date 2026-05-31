@@ -5,6 +5,12 @@ from dataclasses import asdict
 from pawcare.schemas.state import Observation
 from pawcare.services.case_models import CaseMatch, CommunityCase
 from pawcare.services.pet_models import PetRecord
+from pawcare.skills.symptom_understanding import (
+    TRIAGE_INTENT_TERMS,
+    contains_any,
+    extract_canonical_terms,
+    normalize_identifier,
+)
 
 
 class SimilarCaseService:
@@ -52,27 +58,7 @@ class SimilarCaseService:
         return self._terms_from_text(raw_text)
 
     def _has_triage_intent(self, raw_text: str) -> bool:
-        text = raw_text.lower()
-        intent_terms = [
-            "what is wrong",
-            "what might",
-            "could it be",
-            "is it",
-            "is there any problem",
-            "any problem",
-            "should i worry",
-            "i am worried",
-            "i'm worried",
-            "concerned",
-            "可能是",
-            "会不会是",
-            "怎么了",
-            "有点担心",
-            "担心",
-            "奇怪吗",
-            "要紧吗",
-        ]
-        return any(term in text for term in intent_terms)
+        return contains_any(raw_text, TRIAGE_INTENT_TERMS)
 
     def _profile_terms(self, pet: PetRecord) -> set[str]:
         profile_text = " ".join(
@@ -143,59 +129,10 @@ class SimilarCaseService:
         return "background_context"
 
     def _terms_from_text(self, value: str) -> set[str]:
-        text = value.lower()
-        term_groups = {
-            "acl": ["acl", "ccl", "cruciate"],
-            "patellar_luxation": ["patella", "luxating", "kneecap", "膝盖", "髌骨"],
-            "post_op": ["post-op", "post op", "surgery", "术后", "手术"],
-            "non_weight_bearing": [
-                "non-weight-bearing",
-                "not weight bearing",
-                "won't put",
-                "wont put",
-                "not putting",
-                "不敢把脚放",
-                "不落地",
-                "跛",
-                "limp",
-                "limping",
-            ],
-            "rehab_reluctance": ["exercise", "rehab", "康复", "复健", "struggle"],
-            "head_withdrawal": ["head", "shrink", "缩头", "歪头", "tilt"],
-            "drooling": ["drool", "drooling", "流口水"],
-            "oral_mass": ["mouth", "oral", "tongue", "舌头", "口腔", "肿瘤", "mass"],
-            "tongue_lump": ["under tongue", "舌下", "tongue lump"],
-            "salivary_gland": ["salivary", "mucocele", "唾液"],
-            "vomiting": ["vomit", "vomiting", "throwing up", "吐"],
-            "diarrhea": ["diarrhea", "loose stool", "拉稀", "软便"],
-            "bloody_stool": ["bloody stool", "blood in stool", "便血"],
-            "gi": ["gastroenteritis", "gi", "stomach", "肠胃"],
-            "urinary": ["urine", "pee", "urinary", "尿"],
-            "bloody_urine": ["blood in urine", "bloody urine", "尿血"],
-            "cannot_pee": [
-                "cannot pee",
-                "can't pee",
-                "couldn't pee",
-                "couldnt' pee",
-                "couldnt pee",
-                "didn't pee",
-                "all day long",
-                "straining to pee",
-                "尿不出",
-                "没尿",
-            ],
-            "respiratory": ["cough", "coughing", "breathing", "respiratory", "咳", "呼吸"],
-            "breathing_hard": ["breathing hard", "labored breathing", "呼吸困难"],
-            "skin_lump": ["skin lump", "lump", "bump", "itching", "皮肤", "肿块"],
-        }
-        terms: set[str] = set()
-        for canonical, needles in term_groups.items():
-            if any(needle in text for needle in needles):
-                terms.add(canonical)
-        return terms
+        return extract_canonical_terms(value)
 
     def _normalize_token(self, value: str) -> str:
-        return value.lower().strip().replace(" ", "_").replace("-", "_")
+        return normalize_identifier(value)
 
 
 def seed_community_cases() -> list[CommunityCase]:
