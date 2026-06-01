@@ -64,6 +64,8 @@ def test_coordinator_builds_active_context_and_merges_behavior_risk_update() -> 
     assert state.final_recommendation is not None
     assert state.final_recommendation.safety_checked is True
     assert "stress signals near high-value resource" in state.final_recommendation.owner_message
+    assert state.active_context.relevant_baseline["behavior_references"]
+    assert "Behavior context:" in behavior_output.reasoning_trace
 
 
 def test_coordinator_merges_play_case_as_protective_factor() -> None:
@@ -148,3 +150,23 @@ def test_coordinator_merges_mixed_health_and_social_outputs() -> None:
     assert conflict.involved_agents == ["HealthAgent", "BehaviorAgent"]
     assert state.safety_review is not None
     assert state.final_recommendation is not None
+
+
+def test_coordinator_passes_professional_references_to_health_agent() -> None:
+    result = CareCoordinator().handle_log(
+        workflow_id="wf_005",
+        dog_id="dog_123",
+        raw_text="Mochi is vomiting and has diarrhea. Could it be gastroenteritis?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    state = result.state
+    health_output = next(output for output in state.agent_outputs if output.agent == "HealthAgent")
+    assert state.active_context is not None
+    assert state.active_context.target_agent == "HealthAgent"
+    assert state.active_context.relevant_baseline["professional_references"]
+    assert "Professional context:" in health_output.reasoning_trace
+    assert "Merck Veterinary Manual" in health_output.reasoning_trace

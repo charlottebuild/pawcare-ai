@@ -658,6 +658,15 @@ p {
   font-weight: 800;
 }
 
+.context-summary {
+  border-radius: 12px;
+  background: #eefaf3;
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  padding: 9px 10px;
+}
+
 .case-card-list {
   display: grid;
   gap: 8px;
@@ -670,6 +679,11 @@ p {
   border-radius: 14px;
   background: linear-gradient(180deg, #fbf9ff, #ffffff);
   padding: 11px;
+}
+
+.professional-reference-card {
+  border-color: #cde7d8;
+  background: linear-gradient(180deg, #f5fff8, #ffffff);
 }
 
 .case-card h4 {

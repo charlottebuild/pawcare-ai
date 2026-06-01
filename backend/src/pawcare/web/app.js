@@ -435,14 +435,18 @@ async function sendPetMessage(rawText) {
   );
 }
 
-async function fetchRelatedCases(rawText) {
+async function fetchCareContext(rawText) {
   if (!state.userId || !state.selectedPetId || !rawText) {
-    return { disclaimer: "", related_cases: [] };
+    return {
+      non_diagnostic_notice: "",
+      professional_references: [],
+      related_cases: [],
+    };
   }
   return api(
     `/v1/users/${encodeURIComponent(state.userId)}/pets/${encodeURIComponent(
       state.selectedPetId,
-    )}/related-cases`,
+    )}/care-context`,
     {
       method: "POST",
       body: {
@@ -604,14 +608,13 @@ async function renderResponse(response, rawText = "") {
       ? `Escalation: ${response.escalation_conditions.join("; ")}`
       : "",
   ].filter(Boolean);
-  const relatedCases = await fetchRelatedCases(rawText);
+  const careContext = await fetchCareContext(rawText);
   addChatMessage(
     "assistant",
     response.message,
     response.status,
     meta,
-    relatedCases.related_cases || [],
-    relatedCases.disclaimer || "",
+    careContext,
   );
 }
 
@@ -1033,11 +1036,10 @@ function addChatMessage(
   message,
   status = "",
   meta = [],
-  relatedCases = [],
-  caseDisclaimer = "",
+  careContext = null,
 ) {
   const chat = messagesForCurrentPet();
-  const chatMessage = { role, message, status, meta, relatedCases, caseDisclaimer };
+  const chatMessage = { role, message, status, meta, careContext };
   chat.push(chatMessage);
   appendChatBubble(chatMessage);
   elements.chatThread.scrollTop = elements.chatThread.scrollHeight;
@@ -1066,8 +1068,7 @@ function appendChatBubble({
   message,
   status = "",
   meta = [],
-  relatedCases = [],
-  caseDisclaimer = "",
+  careContext = null,
 }) {
   const item = document.createElement("article");
   item.className = `chat-bubble ${role}`;
@@ -1079,7 +1080,7 @@ function appendChatBubble({
         ${status ? `<span class="status-pill ${escapeHtml(status)}">${escapeHtml(status)}</span>` : ""}
         <p>${escapeHtml(message)}</p>
         ${meta.length ? `<ul>${meta.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>` : ""}
-        ${renderRelatedCasesMarkup(relatedCases, caseDisclaimer)}
+        ${renderCareContextMarkup(careContext)}
       </div>
     `;
   } else {
@@ -1088,21 +1089,49 @@ function appendChatBubble({
   elements.chatThread.append(item);
 }
 
-function renderRelatedCasesMarkup(relatedCases = [], disclaimer = "") {
-  if (!relatedCases.length) {
+function renderCareContextMarkup(careContext = null) {
+  const references = careContext?.professional_references || [];
+  const relatedCases = careContext?.related_cases || [];
+  const notice = careContext?.non_diagnostic_notice || "";
+  const contextSummary = careContext?.context_summary || "";
+  if (!contextSummary && !references.length && !relatedCases.length) {
     return "";
   }
   return `
-    <section class="related-cases" aria-label="Similar cases">
+    <section class="related-cases" aria-label="Care context">
       <div class="related-cases-header">
-        <strong>Similar cases</strong>
+        <strong>Care context</strong>
         <span>Not a diagnosis</span>
       </div>
-      ${disclaimer ? `<p class="case-disclaimer">${escapeHtml(disclaimer)}</p>` : ""}
+      ${notice ? `<p class="case-disclaimer">${escapeHtml(notice)}</p>` : ""}
+      ${contextSummary ? `<p class="context-summary">${escapeHtml(contextSummary)}</p>` : ""}
       <div class="case-card-list">
+        ${references.map((item) => renderProfessionalReferenceCard(item)).join("")}
         ${relatedCases.map((item) => renderRelatedCaseCard(item)).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderProfessionalReferenceCard(item) {
+  const redFlags = item.red_flags || [];
+  const record = item.what_to_record || [];
+  const topics = item.vet_discussion_topics || [];
+  return `
+    <article class="case-card professional-reference-card">
+      <div class="case-card-topline">
+        <span>Vet reference</span>
+        <span>${escapeHtml(item.relevance_level || "related")}</span>
+      </div>
+      <h4>${escapeHtml(item.source_name || "Professional reference")}</h4>
+      <p>${escapeHtml(item.summary || "")}</p>
+      ${topics.length ? `<p><strong>Discuss with vet:</strong> ${escapeHtml(topics.slice(0, 4).join(", "))}</p>` : ""}
+      ${record.length ? `<p><strong>Record before visit:</strong> ${escapeHtml(record.slice(0, 5).join(", "))}</p>` : ""}
+      ${redFlags.length ? `<p><strong>Watch urgently for:</strong> ${escapeHtml(redFlags.slice(0, 3).join("; "))}</p>` : ""}
+      <a href="${escapeAttribute(item.source_url || "#")}" target="_blank" rel="noopener noreferrer">
+        Open reference
+      </a>
+    </article>
   `;
 }
 
@@ -1113,7 +1142,7 @@ function renderRelatedCaseCard(item) {
   return `
     <article class="case-card">
       <div class="case-card-topline">
-        <span>${escapeHtml(item.case_relevance_level || "related")} relevance</span>
+        <span>Similar case</span>
         <span>${escapeHtml(item.condition_discussion_priority || "discussion topic")}</span>
       </div>
       <h4>${escapeHtml(item.title || "Related pet case")}</h4>

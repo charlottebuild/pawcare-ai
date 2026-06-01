@@ -3,6 +3,11 @@ from __future__ import annotations
 import re
 from typing import Iterable
 
+from pawcare.knowledge.abnormal_signals import (
+    abnormal_care_context_terms,
+    abnormal_signal_term_groups,
+)
+
 
 TRIAGE_INTENT_TERMS = [
     "what is wrong",
@@ -28,34 +33,14 @@ TRIAGE_INTENT_TERMS = [
     "要紧吗",
 ]
 
-URINARY_OBSTRUCTION_TERMS = [
-    "can't pee",
-    "cant pee",
-    "couldn't pee",
-    "couldnt pee",
-    "cannot pee",
-    "didn't pee",
-    "did not pee",
-    "no pee",
-    "no urine",
-    "not peeing",
-    "cannot urinate",
-    "can't urinate",
-    "couldn't urinate",
-    "didn't urinate",
-    "straining",
-    "little or no urine",
-    "didn't pee all day",
-    "did not pee all day",
-    "尿不出",
-    "没尿",
-    "一天没尿",
-    "没有尿",
-]
+ABNORMAL_SIGNAL_TERM_GROUPS = abnormal_signal_term_groups()
+URINARY_OBSTRUCTION_TERMS = ABNORMAL_SIGNAL_TERM_GROUPS["cannot_pee"]
+ABNORMAL_CARE_CONTEXT_TERMS = abnormal_care_context_terms()
 
 SIMILAR_CASE_TERM_GROUPS = {
     "acl": ["acl", "ccl", "cruciate"],
     "patellar_luxation": ["patella", "luxating", "kneecap", "膝盖", "髌骨"],
+    "pain": ["pain", "painful", "sore", "疼", "疼痛"],
     "post_op": ["post-op", "post op", "surgery", "术后", "手术"],
     "non_weight_bearing": [
         "non-weight-bearing",
@@ -64,6 +49,10 @@ SIMILAR_CASE_TERM_GROUPS = {
         "wont put",
         "not putting",
         "不敢把脚放",
+        "脚落不了地",
+        "不能落地",
+        "不敢落地",
+        "一只脚落不了地",
         "不落地",
         "跛",
         "limp",
@@ -73,6 +62,7 @@ SIMILAR_CASE_TERM_GROUPS = {
     "head_withdrawal": ["head", "shrink", "缩头", "歪头", "tilt"],
     "drooling": ["drool", "drooling", "流口水"],
     "oral_mass": ["mouth", "oral", "tongue", "舌头", "口腔", "肿瘤", "mass"],
+    "dental_or_oral_pain": ["dental", "tooth", "teeth", "mouth pain", "oral pain", "牙", "口腔疼"],
     "tongue_lump": ["under tongue", "舌下", "tongue lump"],
     "salivary_gland": ["salivary", "mucocele", "唾液"],
     "vomiting": ["vomit", "vomiting", "throwing up", "throw up", "吐"],
@@ -85,7 +75,15 @@ SIMILAR_CASE_TERM_GROUPS = {
     "respiratory": ["cough", "coughing", "breathing", "respiratory", "咳", "呼吸"],
     "breathing_hard": ["breathing hard", "labored breathing", "呼吸困难"],
     "skin_lump": ["skin lump", "lump", "bump", "itching", "皮肤", "肿块"],
+    "anxiety": ["anxiety", "anxious", "panic", "pacing", "whining", "焦虑", "紧张"],
+    "resource_guarding": ["resource guarding", "guarding", "chew", "toy", "food bowl", "护食", "护玩具"],
 }
+
+for canonical_term, phrases in ABNORMAL_SIGNAL_TERM_GROUPS.items():
+    existing = SIMILAR_CASE_TERM_GROUPS.setdefault(canonical_term, [])
+    for phrase in phrases:
+        if phrase not in existing:
+            existing.append(phrase)
 
 
 def normalize_user_text(value: str) -> str:
@@ -128,6 +126,14 @@ def extract_canonical_terms(
         for canonical, terms in groups.items()
         if contains_any(text, terms)
     }
+
+
+def has_care_context_trigger(text: str) -> bool:
+    """Return true when user intent or abnormal signals justify care context."""
+
+    if contains_any(text, TRIAGE_INTENT_TERMS):
+        return True
+    return bool(extract_canonical_terms(text) & ABNORMAL_CARE_CONTEXT_TERMS)
 
 
 def normalize_identifier(value: str) -> str:

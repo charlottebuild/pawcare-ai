@@ -1,4 +1,8 @@
-from pawcare.skills.symptom_understanding import contains_any, normalize_match_text
+from pawcare.skills.symptom_understanding import (
+    contains_any,
+    has_care_context_trigger,
+    normalize_match_text,
+)
 
 
 def test_normalizes_mistyped_contractions_for_matching() -> None:
@@ -14,3 +18,10 @@ def test_normalizes_punctuation_without_losing_chinese_symptoms() -> None:
 
 def test_broad_time_phrase_alone_is_not_a_urinary_signal() -> None:
     assert not contains_any("she was playful all day long", ["didn't pee all day"])
+
+
+def test_abnormal_signals_trigger_care_context_without_question_intent() -> None:
+    assert has_care_context_trigger("猫猫一天没上厕所")
+    assert has_care_context_trigger("Heidou has bloody stool")
+    assert has_care_context_trigger("狗狗一只脚落不了地")
+    assert not has_care_context_trigger("Heidou did not have breakfast this morning.")

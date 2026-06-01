@@ -18,10 +18,13 @@ from pawcare.services import (
     PetRecord,
     PetRecordAccessError,
     PetRepository,
+    ProfessionalReferenceService,
     SQLitePetRepository,
     SimilarCaseService,
     UserAccount,
+    build_knowledge_summarizer,
 )
+from pawcare.services.knowledge_summarizer import KnowledgeSummarizer
 
 
 class CreateUserRequest(BaseModel):
@@ -102,10 +105,14 @@ class RelatedCasesRequest(BaseModel):
 def create_app(
     repository: PetRepository | None = None,
     similar_case_service: SimilarCaseService | None = None,
+    professional_reference_service: ProfessionalReferenceService | None = None,
+    knowledge_summarizer: KnowledgeSummarizer | None = None,
 ) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
     case_service = similar_case_service or SimilarCaseService()
+    reference_service = professional_reference_service or ProfessionalReferenceService()
+    summarizer = knowledge_summarizer or build_knowledge_summarizer()
     app = FastAPI(title="PawCare AI API", version="0.1.0")
     _mount_web_app(app)
 
@@ -216,6 +223,51 @@ def create_app(
                 "signs with a veterinarian."
             ),
             "related_cases": case_service.as_payload(matches),
+        }
+
+    @app.post("/v1/users/{user_id}/pets/{pet_id}/care-context")
+    def find_care_context(
+        user_id: str,
+        pet_id: str,
+        request: RelatedCasesRequest,
+    ) -> dict[str, Any]:
+        pet = _get_accessible_pet(
+            repository=pet_repository,
+            user_id=user_id,
+            pet_id=_validate_pet_id(pet_id),
+        )
+        professional_matches = reference_service.find_matches(
+            raw_text=request.raw_text,
+            pet=pet,
+            recent_observations=pet.observations,
+            limit=request.limit,
+        )
+        case_matches = case_service.find_matches(
+            raw_text=request.raw_text,
+            pet=pet,
+            recent_observations=pet.observations,
+            limit=request.limit,
+        )
+        professional_payload = reference_service.as_payload(professional_matches)
+        case_payload = case_service.as_payload(case_matches)
+        context_summary = summarizer.summarize(
+            matches=professional_payload + case_payload,
+            raw_text=request.raw_text,
+            pet_context={
+                "pet_id": pet.pet_id,
+                "name": pet.dog_profile.name,
+                "species": pet.dog_profile.species,
+                "breed": pet.dog_profile.breed,
+            },
+        )
+        return {
+            "non_diagnostic_notice": (
+                "Professional references and similar cases are supporting context, not a "
+                "diagnosis. Discuss concerning signs with a veterinarian."
+            ),
+            "context_summary": context_summary,
+            "professional_references": professional_payload,
+            "related_cases": case_payload,
         }
 
     @app.post("/v1/users/{user_id}/pets/{pet_id}/messages")

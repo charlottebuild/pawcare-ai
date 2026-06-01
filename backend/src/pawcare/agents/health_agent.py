@@ -74,7 +74,13 @@ class HealthAgent:
                 operation="append",
                 value=proposed_value,
             ),
-            reasoning_trace=self._reasoning_trace(signals=signals, guideline_ids=guideline_ids),
+            reasoning_trace=self._reasoning_trace(
+                signals=signals,
+                guideline_ids=guideline_ids,
+                professional_references=active_context.relevant_baseline.get(
+                    "professional_references", []
+                ),
+            ),
             source_guideline_ids=guideline_ids,
         )
 
@@ -211,15 +217,37 @@ class HealthAgent:
             return "low stool monitoring concern", "soft stool reported", 0.72
         return "low health monitoring concern", "health observation recorded", 0.65
 
-    def _reasoning_trace(self, *, signals: set[str], guideline_ids: list[str]) -> str:
+    def _reasoning_trace(
+        self,
+        *,
+        signals: set[str],
+        guideline_ids: list[str],
+        professional_references: object,
+    ) -> str:
         topics = [get_guideline(guideline_id).topic for guideline_id in guideline_ids]
+        reference_names = self._reference_names(professional_references)
+        reference_trace = (
+            " Professional context: " + "; ".join(reference_names) + "."
+            if reference_names
+            else ""
+        )
         return (
             "Observed health signals: "
             + ", ".join(sorted(signals))
             + ". Applied guidelines: "
             + "; ".join(topics)
             + "."
+            + reference_trace
         )
+
+    def _reference_names(self, professional_references: object) -> list[str]:
+        if not isinstance(professional_references, list):
+            return []
+        names: list[str] = []
+        for reference in professional_references:
+            if isinstance(reference, dict) and reference.get("source_name"):
+                names.append(str(reference["source_name"]))
+        return names[:3]
 
     def _output(
         self,

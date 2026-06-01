@@ -4,20 +4,28 @@ from dataclasses import asdict
 
 from pawcare.schemas.state import Observation
 from pawcare.services.case_models import CaseMatch, CommunityCase
+from pawcare.services.knowledge_adapters import community_case_to_record
+from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
 from pawcare.services.pet_models import PetRecord
 from pawcare.skills.symptom_understanding import (
-    TRIAGE_INTENT_TERMS,
-    contains_any,
     extract_canonical_terms,
-    normalize_identifier,
+    has_care_context_trigger,
 )
 
 
 class SimilarCaseService:
     """Deterministic related-case retrieval for non-diagnostic triage support."""
 
-    def __init__(self, *, cases: list[CommunityCase] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        cases: list[CommunityCase] | None = None,
+        knowledge_index: KnowledgeIndex | None = None,
+    ) -> None:
         self.cases = cases or seed_community_cases()
+        self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
+            records=[community_case_to_record(case) for case in self.cases]
+        )
 
     def find_matches(
         self,
@@ -32,20 +40,26 @@ class SimilarCaseService:
         trigger_terms = self._trigger_terms(
             raw_text=raw_text,
         )
-        query_terms = set(trigger_terms)
-        query_terms.update(self._profile_terms(pet))
-        scored: list[tuple[int, CommunityCase, list[str]]] = []
-        for case in self.cases:
-            matched = self._matched_terms(case=case, query_terms=query_terms)
-            trigger_matched = self._matched_terms(case=case, query_terms=trigger_terms)
-            if trigger_matched:
-                scored.append((self._score(case=case, matched=matched), case, matched))
-
-        scored.sort(key=lambda item: (-item[0], item[1].case_id))
-        return [
-            self._to_match(case=case, matched=matched, score=score)
-            for score, case, matched in scored[:limit]
+        query_text = " ".join(
+            item
+            for item in [
+                raw_text,
+                pet.dog_profile.breed or "",
+                " ".join(pet.health_baseline.known_medical_notes),
+            ]
+            if item
+        )
+        matches = self.knowledge_index.search(
+            query_text=query_text,
+            kinds={"community_case"},
+            limit=max(limit * 3, 10),
+        )
+        filtered = [
+            self._to_match(match)
+            for match in matches
+            if set(match.matched_signals) & trigger_terms
         ]
+        return filtered[:limit]
 
     def as_payload(self, matches: list[CaseMatch]) -> list[dict[str, object]]:
         return [asdict(match) for match in matches]
@@ -58,60 +72,23 @@ class SimilarCaseService:
         return self._terms_from_text(raw_text)
 
     def _has_triage_intent(self, raw_text: str) -> bool:
-        return contains_any(raw_text, TRIAGE_INTENT_TERMS)
+        return has_care_context_trigger(raw_text)
 
-    def _profile_terms(self, pet: PetRecord) -> set[str]:
-        profile_text = " ".join(
-            item
-            for item in [
-                pet.dog_profile.breed or "",
-                " ".join(pet.health_baseline.known_medical_notes),
-            ]
-            if item
-        )
-        return self._terms_from_text(profile_text)
-
-    def _matched_terms(self, *, case: CommunityCase, query_terms: set[str]) -> list[str]:
-        case_terms = set(case.symptoms) | set(case.body_areas) | set(
-            case.possible_discussion_topics
-        )
-        normalized_case_terms = {self._normalize_token(term) for term in case_terms}
-        normalized_query_terms = {self._normalize_token(term) for term in query_terms}
-        matches = normalized_case_terms & normalized_query_terms
-        return sorted(term for term in matches if term)
-
-    def _score(self, *, case: CommunityCase, matched: list[str]) -> int:
-        high_signal_terms = {
-            "acl",
-            "ccl",
-            "patellar_luxation",
-            "post_op",
-            "non_weight_bearing",
-            "oral_mass",
-            "salivary_gland",
-            "tongue_lump",
-            "bloody_urine",
-            "cannot_pee",
-            "breathing_hard",
-        }
-        return len(matched) + sum(2 for term in matched if term in high_signal_terms)
-
-    def _to_match(
-        self, *, case: CommunityCase, matched: list[str], score: int
-    ) -> CaseMatch:
+    def _to_match(self, match) -> CaseMatch:
+        record = match.record
         return CaseMatch(
-            case_id=case.case_id,
-            title=case.title,
-            source_platform=case.source_platform,
-            source_url=case.source_url,
-            case_summary=case.short_summary,
-            privacy_safe_snippet=case.privacy_safe_snippet,
-            matched_symptoms=matched,
-            possible_discussion_topics=case.possible_discussion_topics,
-            red_flags=case.red_flags,
-            case_relevance_level=self._relevance(score),
-            condition_discussion_priority=self._priority(score),
-            vet_outcome=case.vet_outcome,
+            case_id=record.record_id,
+            title=record.title or record.source_name,
+            source_platform=record.source_type,
+            source_url=record.source_url,
+            case_summary=record.summary,
+            privacy_safe_snippet=record.privacy_safe_snippet or "",
+            matched_symptoms=list(match.matched_signals),
+            possible_discussion_topics=list(record.discussion_topics),
+            red_flags=list(record.red_flags),
+            case_relevance_level=match.relevance_level,
+            condition_discussion_priority=self._priority(match.relevance_score),
+            vet_outcome=record.vet_outcome,
         )
 
     def _relevance(self, score: int) -> str:
@@ -131,16 +108,12 @@ class SimilarCaseService:
     def _terms_from_text(self, value: str) -> set[str]:
         return extract_canonical_terms(value)
 
-    def _normalize_token(self, value: str) -> str:
-        return normalize_identifier(value)
-
-
 def seed_community_cases() -> list[CommunityCase]:
     return [
         CommunityCase(
             case_id="case_acl_postop_001",
             title="Post-op dog avoided weight-bearing during recovery",
-            source_platform="seeded_public_summary",
+            source_platform="seeded_clinical_profile",
             source_url="https://example.com/pawcare-cases/acl-postop-weight-bearing",
             short_summary=(
                 "Owner noticed a dog still avoided putting weight on the operated leg during "
@@ -160,7 +133,7 @@ def seed_community_cases() -> list[CommunityCase]:
         CommunityCase(
             case_id="case_patella_001",
             title="Small dog skipped steps and lifted a back leg",
-            source_platform="seeded_public_summary",
+            source_platform="seeded_clinical_profile",
             source_url="https://example.com/pawcare-cases/patellar-luxation-skipping",
             short_summary=(
                 "Owner described intermittent hopping and back-leg lifting; vet discussion "
@@ -176,7 +149,7 @@ def seed_community_cases() -> list[CommunityCase]:
         CommunityCase(
             case_id="case_oral_neck_001",
             title="Dog pulled head back while eating; oral exam found a benign lump",
-            source_platform="seeded_public_summary",
+            source_platform="seeded_clinical_profile",
             source_url="https://example.com/pawcare-cases/oral-lump-eating-discomfort",
             short_summary=(
                 "Owner noticed head withdrawal and head tilting while eating; veterinary exam "
@@ -199,7 +172,7 @@ def seed_community_cases() -> list[CommunityCase]:
                 "indiscretion, infection, and dehydration risk with a vet."
             ),
             privacy_safe_snippet="Vomiting plus diarrhea; owner tracked frequency, stool color, and energy.",
-            symptoms=["vomiting", "diarrhea", "gi"],
+            symptoms=["vomiting", "diarrhea", "bloody_stool", "gi"],
             body_areas=["gi"],
             possible_discussion_topics=["gi", "dietary_irritation", "infection_discussion"],
             vet_outcome="Vet triaged hydration and stool/vomit history.",
@@ -208,7 +181,7 @@ def seed_community_cases() -> list[CommunityCase]:
         CommunityCase(
             case_id="case_urinary_001",
             title="Straining to pee with blood was treated as urgent",
-            source_platform="seeded_public_summary",
+            source_platform="seeded_clinical_profile",
             source_url="https://example.com/pawcare-cases/urinary-straining-blood",
             short_summary=(
                 "Owner saw straining and blood in urine; community responses emphasized urgent "
@@ -252,5 +225,53 @@ def seed_community_cases() -> list[CommunityCase]:
             possible_discussion_topics=["skin_lump", "allergy_or_mass_discussion"],
             vet_outcome="Vet visit focused on documenting growth and irritation.",
             red_flags=["rapid growth", "bleeding", "pain", "open wound"],
+        ),
+        CommunityCase(
+            case_id="case_seizure_001",
+            title="Pet had a seizure-like episode and owner tracked duration",
+            source_platform="seeded_clinical_profile",
+            source_url="https://example.com/pawcare-cases/seizure-like-episode-duration",
+            short_summary=(
+                "Owner described collapse with shaking; similar cases focused on timing the episode, "
+                "recording recovery, and contacting a vet for neurologic triage."
+            ),
+            privacy_safe_snippet="Shaking episode with recovery period; owner recorded duration.",
+            symptoms=["seizure", "convulsion", "neurologic"],
+            body_areas=["neurologic"],
+            possible_discussion_topics=["seizure_like_episode", "syncope_discussion", "toxin_exposure"],
+            vet_outcome="Vet discussion focused on duration, repeat events, and possible exposures.",
+            red_flags=["repeated seizures", "does not recover", "possible toxin exposure"],
+        ),
+        CommunityCase(
+            case_id="case_bloat_001",
+            title="Dog had a hard swollen belly and tried to vomit",
+            source_platform="seeded_clinical_profile",
+            source_url="https://example.com/pawcare-cases/hard-belly-unproductive-retching",
+            short_summary=(
+                "Owner noticed a hard, swollen abdomen and repeated retching; similar cases "
+                "treated this as an emergency discussion topic for bloat/GDV."
+            ),
+            privacy_safe_snippet="Hard swollen abdomen with unproductive retching.",
+            symptoms=["abdominal_distension", "bloat", "unproductive_vomiting"],
+            body_areas=["abdomen"],
+            possible_discussion_topics=["bloat_gdv", "abdominal_emergency", "urgent_triage"],
+            vet_outcome="Urgent veterinary evaluation was recommended in the summarized case.",
+            red_flags=["hard or swollen abdomen", "unproductive retching", "collapse"],
+        ),
+        CommunityCase(
+            case_id="case_eye_injury_001",
+            title="Eye injury with squinting needed urgent eye exam",
+            source_platform="seeded_clinical_profile",
+            source_url="https://example.com/pawcare-cases/eye-injury-squinting",
+            short_summary=(
+                "Owner saw eye trauma with squinting and possible vision change; similar cases "
+                "focused on urgent veterinary eye evaluation rather than home treatment."
+            ),
+            privacy_safe_snippet="Eye trauma with squinting and visible discomfort.",
+            symptoms=["eye_injury", "vision_loss", "eye_pain"],
+            body_areas=["eye"],
+            possible_discussion_topics=["eye_trauma", "corneal_injury", "vision_change"],
+            vet_outcome="Vet evaluation was recommended because vision can be at risk.",
+            red_flags=["eye bulging", "sudden blindness", "keeps eye closed", "severe pain"],
         ),
     ]

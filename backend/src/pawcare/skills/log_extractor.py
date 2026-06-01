@@ -279,6 +279,7 @@ class LogExtractor:
     ) -> Observation | None:
         stool_terms = [
             "poop",
+            "poo",
             "stool",
             "diarrhea",
             "便便",
@@ -288,6 +289,10 @@ class LogExtractor:
             "拉稀",
             "blood in stool",
             "bloody stool",
+            "poop blood",
+            "poo blood",
+            "blood in poop",
+            "blood in poo",
             "black stool",
             "tarry stool",
             "血便",
@@ -298,7 +303,23 @@ class LogExtractor:
             return None
 
         stool_quality = "absent"
-        if self._contains_any(text, ["bloody stool", "blood in stool", "血便", "便血"]):
+        if self._contains_any(
+            text,
+            [
+                "bloody stool",
+                "blood in stool",
+                "poop blood",
+                "pooped blood",
+                "pooping blood",
+                "poo blood",
+                "pooed blood",
+                "pooing blood",
+                "blood in poop",
+                "blood in poo",
+                "血便",
+                "便血",
+            ],
+        ):
             stool_quality = "bloody"
         elif self._contains_any(text, ["black stool", "tarry stool", "黑便"]):
             stool_quality = "black_tarry"

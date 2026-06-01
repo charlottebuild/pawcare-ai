@@ -98,6 +98,21 @@ def test_extracts_medication_and_bloody_stool_observations() -> None:
     assert "GL_NSAID_SIDE_EFFECT_001" in medication.source_guideline_ids
 
 
+def test_extracts_plain_poo_blood_as_bloody_stool() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Niao Niao poo blood this morning.",
+        timestamp="2026-05-08T09:30:00-07:00",
+    )
+
+    stool = next(
+        observation
+        for observation in batch.observations
+        if observation.category == ObservationCategory.stool
+    )
+    assert stool.health_context == {"stool_quality": "bloody"}
+
+
 def test_extracts_acl_postop_non_weight_bearing_mobility_observation() -> None:
     batch = LogExtractor().extract(
         dog_id="dog_123",

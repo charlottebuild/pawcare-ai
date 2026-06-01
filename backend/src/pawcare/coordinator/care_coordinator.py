@@ -21,6 +21,9 @@ from pawcare.schemas.state import (
     RiskDomain,
     Species,
 )
+from pawcare.services.behavior_reference_service import BehaviorReferenceService
+from pawcare.services.pet_models import PetRecord
+from pawcare.services.professional_reference_service import ProfessionalReferenceService
 from pawcare.skills import LogExtractor
 
 HEALTH_OBSERVATION_CATEGORIES = {
@@ -56,12 +59,20 @@ class CareCoordinator:
         health_agent: HealthAgent | None = None,
         safety_agent: SafetyAgent | None = None,
         communication_agent: CommunicationAgent | None = None,
+        professional_reference_service: ProfessionalReferenceService | None = None,
+        behavior_reference_service: BehaviorReferenceService | None = None,
     ) -> None:
         self.log_extractor = log_extractor or LogExtractor()
         self.behavior_agent = behavior_agent or BehaviorAgent()
         self.health_agent = health_agent or HealthAgent()
         self.safety_agent = safety_agent or SafetyAgent()
         self.communication_agent = communication_agent or CommunicationAgent()
+        self.professional_reference_service = (
+            professional_reference_service or ProfessionalReferenceService()
+        )
+        self.behavior_reference_service = (
+            behavior_reference_service or BehaviorReferenceService()
+        )
 
     def handle_log(
         self,
@@ -171,6 +182,9 @@ class CareCoordinator:
             relevant_baseline={
                 "health_baseline": state.health_baseline.model_dump(),
                 "medical_notes": state.dog_profile.care_notes,
+                "professional_references": self._professional_reference_payload(
+                    state=state
+                ),
             },
             allowed_guideline_ids=[
                 "GL_STOOL_001",
@@ -209,6 +223,7 @@ class CareCoordinator:
             relevant_baseline={
                 "social_profile": state.behavioral_baseline.social_profile.model_dump(),
                 "resource_guarding_profile": state.behavioral_baseline.resource_guarding_profile.model_dump(),
+                "behavior_references": self._behavior_reference_payload(state=state),
             },
             allowed_guideline_ids=[
                 "GL_SOCIAL_STRESS_001",
@@ -222,6 +237,30 @@ class CareCoordinator:
                 "What information is missing?",
             ],
         )
+
+    def _professional_reference_payload(self, *, state: PawCareState) -> list[dict[str, object]]:
+        raw_text = " ".join(observation.raw_text for observation in state.observations)
+        matches = self.professional_reference_service.find_matches(
+            raw_text=raw_text,
+            pet=PetRecord(
+                pet_id=state.dog_id,
+                user_id="_coordinator",
+                dog_profile=state.dog_profile,
+                behavioral_baseline=state.behavioral_baseline,
+                health_baseline=state.health_baseline,
+                observations=list(state.observations),
+            ),
+            recent_observations=state.observations,
+            limit=3,
+        )
+        return self.professional_reference_service.as_payload(matches)
+
+    def _behavior_reference_payload(self, *, state: PawCareState) -> list[dict[str, object]]:
+        matches = self.behavior_reference_service.find_matches(
+            observations=state.observations,
+            limit=3,
+        )
+        return self.behavior_reference_service.as_payload(matches)
 
     def _merge_update(
         self,

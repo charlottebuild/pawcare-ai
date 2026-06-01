@@ -48,6 +48,24 @@ def test_plain_status_update_does_not_trigger_similar_cases() -> None:
     assert matches == []
 
 
+def test_abnormal_signals_trigger_similar_cases_without_question_intent() -> None:
+    service = SimilarCaseService()
+
+    urinary = service.find_matches(raw_text="猫猫一天没上厕所", pet=_pet())
+    mobility = service.find_matches(raw_text="狗狗一只脚落不了地", pet=_pet())
+    gi = service.find_matches(raw_text="Heidou has bloody stool", pet=_pet())
+    neurologic = service.find_matches(raw_text="Heidou is convulsing", pet=_pet())
+    abdominal = service.find_matches(raw_text="her belly is hard and bloated", pet=_pet())
+    eye = service.find_matches(raw_text="NiaoNiao has an eye injury", pet=_pet())
+
+    assert urinary[0].case_id == "case_urinary_001"
+    assert mobility[0].case_id in {"case_acl_postop_001", "case_patella_001"}
+    assert gi[0].case_id == "case_gi_001"
+    assert neurologic[0].case_id == "case_seizure_001"
+    assert abdominal[0].case_id == "case_bloat_001"
+    assert eye[0].case_id == "case_eye_injury_001"
+
+
 def test_matches_oral_salivary_lump_case() -> None:
     matches = SimilarCaseService().find_matches(
         raw_text=(

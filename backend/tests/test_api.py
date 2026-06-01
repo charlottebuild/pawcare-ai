@@ -115,8 +115,12 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "Domestic Shorthair" in js_response.text
     assert "avatar_image" in js_response.text
     assert "addMedicationField" in js_response.text
-    assert "fetchRelatedCases" in js_response.text
-    assert "Similar cases" in js_response.text
+    assert "fetchCareContext" in js_response.text
+    assert "context_summary" in js_response.text
+    assert "Vet reference" in js_response.text
+    assert "Similar case" in js_response.text
+    assert "Professional references" not in js_response.text
+    assert "Similar cases" not in js_response.text
     assert "_has_triage_intent" not in js_response.text
     assert "selectPet(state.pets[0].pet_id)" in js_response.text
     assert "focusComposer" in js_response.text
@@ -392,6 +396,162 @@ def test_related_cases_missing_or_unauthorized_pet_returns_generic_404() -> None
     unauthorized_response = client.post(
         "/v1/users/user_123/pets/dog_luna/related-cases",
         json={"raw_text": "limping after surgery"},
+    )
+
+    assert missing_response.status_code == 404
+    assert unauthorized_response.status_code == 404
+
+
+def test_care_context_endpoint_returns_professional_references_and_cases() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={
+            "raw_text": (
+                "Mochi pulls his head back when eating, drools, and has a small "
+                "lump under the tongue. Could it be salivary mucocele?"
+            )
+        },
+    )
+
+    body = response.json()
+    reference = body["professional_references"][0]
+    case = body["related_cases"][0]
+    assert response.status_code == 200
+    assert "not a diagnosis" in body["non_diagnostic_notice"].lower()
+    assert "not a diagnosis" in body["context_summary"].lower()
+    assert reference["domain"] == "oral_neck"
+    assert reference["source_url"].startswith("https://")
+    assert reference["what_to_record"]
+    assert "full_text" not in reference
+    assert case["case_id"] == "case_oral_neck_001"
+
+
+def test_care_context_endpoint_returns_urinary_context_for_cat_red_flag() -> None:
+    client = _client()
+    response = client.post("/v1/users", json={"user_id": "user_123"})
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets",
+        json={
+            "pet_id": "cat_niaoniao",
+            "dog_profile": {
+                "id": "cat_niaoniao",
+                "name": "NiaoNiao",
+                "species": "cat",
+                "breed": "Domestic Shorthair",
+                "care_notes": ["avatar:cat"],
+            },
+            "behavioral_baseline": {},
+            "health_baseline": {},
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/v1/users/user_123/pets/cat_niaoniao/care-context",
+        json={
+            "raw_text": (
+                "NiaoNiao couldnt' pee today and did not pee all day. "
+                "Is there any problem?"
+            )
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert "urinary" in body["context_summary"].lower()
+    assert body["professional_references"][0]["domain"] == "urinary"
+    assert body["related_cases"][0]["case_id"] == "case_urinary_001"
+    assert "diagnosis" in body["non_diagnostic_notice"].lower()
+
+
+def test_care_context_endpoint_returns_urinary_context_for_no_bathroom_update() -> None:
+    client = _client()
+    response = client.post("/v1/users", json={"user_id": "user_123"})
+    assert response.status_code == 200
+    response = client.post(
+        "/v1/users/user_123/pets",
+        json={
+            "pet_id": "cat_niaoniao",
+            "dog_profile": {
+                "id": "cat_niaoniao",
+                "name": "NiaoNiao",
+                "species": "cat",
+                "breed": "Domestic Shorthair",
+                "care_notes": ["avatar:cat"],
+            },
+            "behavioral_baseline": {},
+            "health_baseline": {},
+        },
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/v1/users/user_123/pets/cat_niaoniao/care-context",
+        json={"raw_text": "猫猫一天没上厕所"},
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["professional_references"][0]["domain"] == "urinary"
+    assert body["related_cases"][0]["case_id"] == "case_urinary_001"
+
+
+def test_care_context_endpoint_returns_gi_context_for_poo_blood_phrase() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={"raw_text": "Niao Niao poo blood this morning."},
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["professional_references"][0]["domain"] == "gi"
+    assert body["related_cases"][0]["case_id"] == "case_gi_001"
+
+
+def test_care_context_plain_update_returns_empty_context() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={"raw_text": "Mochi did not have breakfast this morning."},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["context_summary"] == ""
+    assert response.json()["professional_references"] == []
+    assert response.json()["related_cases"] == []
+
+
+def test_care_context_missing_or_unauthorized_pet_returns_generic_404() -> None:
+    repository = InMemoryPetRepository()
+    repository.create_user(UserAccount(user_id="user_123"))
+    repository.create_user(UserAccount(user_id="user_456"))
+    repository.create_pet(
+        PetRecord(
+            pet_id="dog_luna",
+            user_id="user_456",
+            dog_profile=DogProfile(id="dog_luna", name="Luna", species="dog"),
+            behavioral_baseline=BehavioralBaseline(),
+            health_baseline=HealthBaseline(),
+        )
+    )
+    client = TestClient(create_app(repository=repository))
+
+    missing_response = client.post(
+        "/v1/users/user_123/pets/dog_missing/care-context",
+        json={"raw_text": "limping after surgery, should I worry?"},
+    )
+    unauthorized_response = client.post(
+        "/v1/users/user_123/pets/dog_luna/care-context",
+        json={"raw_text": "limping after surgery, should I worry?"},
     )
 
     assert missing_response.status_code == 404
