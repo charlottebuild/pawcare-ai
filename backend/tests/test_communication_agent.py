@@ -115,3 +115,37 @@ def test_communication_agent_keeps_low_risk_play_message_conservative() -> None:
     assert "I will keep an eye on it" in recommendation.owner_message
     assert "Don't worry" not in recommendation.owner_message
     assert "it will be fine" not in recommendation.owner_message
+
+
+def test_communication_agent_formats_postop_rehab_support_message() -> None:
+    risk = RiskAssessment(
+        risk_level=6,
+        risk_band="moderate",
+        primary_risk_domain="health",
+        risk_factors=["post-op rehabilitation difficulty or exercise reluctance"],
+        recommended_action="notify_owner_and_monitor_health_signs",
+        escalation_conditions=[
+            "post-op mobility worsens or non-weight-bearing continues",
+        ],
+        logic="Post-op rehabilitation difficulty was reported.",
+        source_guideline_ids=["GL_LAMENESS_001", "GL_ACL_POSTOP_001"],
+    )
+    safety_review = SafetyReview(
+        safety_checked=True,
+        diagnosis_present=False,
+        medication_advice_present=False,
+        over_reassurance_present=False,
+        source_guideline_ids_present=True,
+        final_status="approved",
+    )
+
+    recommendation = CommunicationAgent().format_owner_message(
+        risk_assessment=risk,
+        safety_review=safety_review,
+    )
+
+    assert "post-op recovery and lameness guidance" in recommendation.owner_message
+    assert "Keep following the veterinarian's specific exercise plan" in recommendation.owner_message
+    assert "treat" in recommendation.owner_message
+    assert "warm or cold compresses" in recommendation.owner_message
+    assert "Do not force through struggling or pain" in recommendation.owner_message

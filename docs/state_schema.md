@@ -816,7 +816,109 @@ Final recommendations must not be emitted unless:
 
 ---
 
-## 15. Minimal Complete Example
+## 15. Product Account and Pet Workspace v1
+
+The product layer models PawCare as an authenticated user workspace with one or more pet records.
+This layer provides application context and storage boundaries; it does not replace `PawCareState`.
+Each user message still flows through `LogProcessingService`, `CareCoordinator`, `SafetyAgent`, and
+`CommunicationAgent` before a user-facing response is returned.
+
+### 15.1 UserAccount
+
+`UserAccount` represents the signed-in product user. In v1 it should stay minimal:
+
+```json
+{
+  "user_id": "user_123",
+  "display_name": "Charlotte",
+  "email": "charlotte@example.com"
+}
+```
+
+Required fields:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `user_id` | string | yes | Stable product user identifier. |
+| `display_name` | string | no | Used for product UI only. |
+| `email` | string | no | Product account metadata; not required for agent reasoning. |
+
+Authentication, passwords, tokens, and session management are out of scope for v1.
+
+### 15.2 PetRecord
+
+`PetRecord` represents one pet inside a user's workspace. It owns the stable profile, baselines,
+and accumulated observation history for that pet.
+
+```json
+{
+  "pet_id": "dog_123",
+  "user_id": "user_123",
+  "dog_profile": {},
+  "behavioral_baseline": {},
+  "health_baseline": {},
+  "observations": []
+}
+```
+
+Required fields:
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `pet_id` | string | yes | Product pet identifier; maps to `dog_id` for current backend models. |
+| `user_id` | string | yes | Owner account; repository reads must enforce this boundary. |
+| `dog_profile` | object | yes | Reuses the `DogProfile` schema. |
+| `behavioral_baseline` | object | yes | Reuses the `BehavioralBaseline` schema. |
+| `health_baseline` | object | yes | Reuses the `HealthBaseline` schema. |
+| `observations` | array | yes | Historical observations appended after each processed user message. |
+
+`PetRecord` is product-layer state. It should not contain internal `agent_outputs`,
+`proposed_update`, `safety_review`, or transient `active_context` objects.
+
+### 15.3 PetRepository Contract
+
+For v1, repository implementations may be in-memory or SQLite-backed while preserving the same
+application-facing interface. This lets `PetMessageService` and API routes use either storage
+implementation without changing message-processing behavior.
+
+Required repository methods:
+
+- create a user-owned pet record
+- list pet records for a user
+- get one pet record by `user_id` and `pet_id`
+- append newly extracted observations to the target pet only
+
+Repository reads must not return pets owned by another user. Missing or unauthorized pet access should
+return a clear product-layer error and must not create an implicit pet record.
+
+`create_pet` is an upsert for profile and baseline state. If the same `user_id` and `pet_id` already
+exist, the stored `dog_profile`, `behavioral_baseline`, and `health_baseline` should be replaced by the
+incoming `PetRecord`.
+
+`append_observations` is the normal way to add new observations during message processing. Product
+message handling must append observations from `log_result.coordinator_result.state.observations`, not
+from response text.
+
+If a repository auto-creates a missing user while creating a pet, it must not overwrite existing user
+metadata such as `display_name` or `email` with empty values.
+
+If `create_pet` is called with an existing pet and an explicit `PetRecord.observations` list, stored
+observations should match that incoming pet record after the upsert. This prevents duplicate observation
+history when tests, seed scripts, or import flows recreate a pet record.
+
+### 15.4 Message Processing Boundary
+
+The app-facing message service should accept `user_id`, `pet_id`, `raw_text`, and `timestamp`.
+It loads the target `PetRecord`, calls the existing log-processing workflow with that pet's profile
+and baselines, appends the new observations to the target pet record, and returns only `UserResponse`.
+
+No-risk updates may return a concise "updated" style response. Moderate or higher risk responses must
+include source guideline IDs and escalation conditions. Internal fields such as `agent_outputs` and
+`proposed_update` must remain hidden from product users.
+
+---
+
+## 16. Minimal Complete Example
 
 ```json
 {
@@ -985,7 +1087,7 @@ Final recommendations must not be emitted unless:
 
 ---
 
-## 16. Implementation Rules
+## 17. Implementation Rules
 
 Before implementing or modifying an agent:
 

@@ -38,6 +38,29 @@ class BehaviorAgent:
         ]
 
         if not social_observations:
+            llm_screening = self._llm_screening(active_context)
+            if llm_screening:
+                return self._output(
+                    active_context=active_context,
+                    observations=observations,
+                    conclusion="moderate LLM behavior screening concern",
+                    confidence=float(llm_screening.get("confidence") or 0.6),
+                    missing_information=["body_language", "trigger", "duration"],
+                    proposed_update=ProposedUpdate(
+                        target_path="risk_assessment.risk_factors",
+                        operation="append",
+                        value=(
+                            "LLM screening suggested behavior review: "
+                            + self._screening_summary(llm_screening)
+                        ),
+                    ),
+                    reasoning_trace=self._with_behavior_context(
+                        active_context,
+                        "LLM screening provided supplementary behavior signal review. "
+                        + self._screening_summary(llm_screening),
+                    ),
+                    source_guideline_ids=self._llm_guideline_ids(llm_screening),
+                )
             return self._output(
                 active_context=active_context,
                 observations=observations,
@@ -128,7 +151,8 @@ class BehaviorAgent:
                     operation="append",
                     value="escalation signals during social interaction",
                 ),
-                reasoning_trace=(
+                reasoning_trace=self._with_behavior_context(
+                    active_context,
                     "Growling, snapping, yelping, or similar escalation signals require "
                     "conservative management and Coordinator review."
                 ),
@@ -147,7 +171,8 @@ class BehaviorAgent:
                     operation="append",
                     value="stress signals near high-value resource",
                 ),
-                reasoning_trace=(
+                reasoning_trace=self._with_behavior_context(
+                    active_context,
                     "Stress body-language signals appeared in a resource context. "
                     "This should be treated as a social/resource risk factor, not ignored."
                 ),
@@ -166,7 +191,8 @@ class BehaviorAgent:
                     operation="append",
                     value="subtle social stress signals",
                 ),
-                reasoning_trace=(
+                reasoning_trace=self._with_behavior_context(
+                    active_context,
                     "Subtle stress body-language signals were present even without overt aggression."
                 ),
                 source_guideline_ids=["GL_SOCIAL_STRESS_001"],
@@ -184,7 +210,8 @@ class BehaviorAgent:
                     operation="append",
                     value="loose body and play bow suggest appropriate play context",
                 ),
-                reasoning_trace=(
+                reasoning_trace=self._with_behavior_context(
+                    active_context,
                     "Loose body language and play bow are more consistent with appropriate play "
                     "when no stress or injury signals are present."
                 ),
@@ -249,3 +276,62 @@ class BehaviorAgent:
         if guarding_profile:
             return []
         return ["resource_guarding_history"]
+
+    def _with_behavior_context(self, active_context: ActiveContext, trace: str) -> str:
+        references = active_context.relevant_baseline.get("behavior_references", [])
+        names: list[str] = []
+        if isinstance(references, list):
+            for reference in references:
+                if isinstance(reference, dict) and reference.get("source_name"):
+                    names.append(str(reference["source_name"]))
+        if not names:
+            return trace
+        return trace + " Behavior context: " + "; ".join(names[:3]) + "."
+
+    def _llm_screening(self, active_context: ActiveContext) -> dict[str, object]:
+        screening = active_context.relevant_baseline.get("llm_screening", {})
+        if not isinstance(screening, dict):
+            return {}
+        domains = {
+            str(item)
+            for item in screening.get("possible_domains", [])
+            if str(item)
+        }
+        guideline_ids = {
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item).startswith("GL_")
+        }
+        behavior_domains = {"behavior", "social", "anxiety", "resource_guarding", "stress"}
+        if domains & behavior_domains or guideline_ids & {
+            "GL_SOCIAL_STRESS_001",
+            "GL_RESOURCE_GUARDING_001",
+            "GL_SOCIAL_PLAY_001",
+        }:
+            return screening
+        return {}
+
+    def _llm_guideline_ids(self, screening: dict[str, object]) -> list[str]:
+        guideline_ids = [
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item)
+            in {
+                "GL_SOCIAL_STRESS_001",
+                "GL_RESOURCE_GUARDING_001",
+                "GL_SOCIAL_PLAY_001",
+            }
+        ]
+        return guideline_ids[:3] or ["GL_SOCIAL_STRESS_001"]
+
+    def _screening_summary(self, screening: dict[str, object]) -> str:
+        summary = str(screening.get("reasoning_summary") or "").strip()
+        if summary:
+            return summary
+        terms = [
+            str(item)
+            for item in screening.get("suggested_canonical_terms", [])
+            if str(item)
+        ]
+        domains = [str(item) for item in screening.get("possible_domains", []) if str(item)]
+        return ", ".join(terms or domains or ["possible behavior signal"])

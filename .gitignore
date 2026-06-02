@@ -1,6 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -23,3 +24,7 @@ build/
 htmlcov/
 .coverage
 coverage.xml
+
+# Local PawCare app data
+pawcare.local.sqlite3
+pawcare.local.sqlite3-*

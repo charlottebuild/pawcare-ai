@@ -25,6 +25,12 @@ from pawcare.schemas.state import (
     Species,
     VocalizationSignal,
 )
+from pawcare.skills.symptom_understanding import (
+    TRIAGE_INTENT_TERMS,
+    URINARY_OBSTRUCTION_TERMS,
+    contains_any,
+    normalize_user_text,
+)
 
 
 @dataclass(frozen=True)
@@ -49,7 +55,7 @@ class LogExtractor:
         species: Species = Species.dog,
         source: Source = Source.user_log,
     ) -> ExtractedObservationBatch:
-        text = raw_text.lower()
+        text = normalize_user_text(raw_text)
         observations: list[Observation] = []
         missing_information: list[str] = []
 
@@ -99,6 +105,29 @@ class LogExtractor:
             observations.append(vomiting_observation)
             missing_information.extend(["vomiting_frequency", "energy_level"])
 
+        mobility_observation = self._extract_mobility_observation(
+            raw_text=raw_text,
+            text=text,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            sequence=len(observations) + 1,
+        )
+        if mobility_observation is not None:
+            observations.append(mobility_observation)
+            missing_information.extend(["affected_limb", "pain_signs"])
+
+        medication_observation = self._extract_medication_observation(
+            raw_text=raw_text,
+            text=text,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            sequence=len(observations) + 1,
+        )
+        if medication_observation is not None:
+            observations.append(medication_observation)
+
         energy_observation = self._extract_energy_observation(
             raw_text=raw_text,
             text=text,
@@ -109,6 +138,17 @@ class LogExtractor:
         )
         if energy_observation is not None:
             observations.append(energy_observation)
+
+        condition_triage_observation = self._extract_condition_triage_observation(
+            raw_text=raw_text,
+            text=text,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            sequence=len(observations) + 1,
+        )
+        if condition_triage_observation is not None:
+            observations.append(condition_triage_observation)
 
         if not observations:
             observations.append(
@@ -191,8 +231,15 @@ class LogExtractor:
     ) -> Observation | None:
         low_food_terms = [
             "didn't eat",
+            "didn't have breakfast",
+            "didn't have lunch",
+            "didn't have dinner",
             "did not eat",
+            "did not have breakfast",
+            "did not have lunch",
+            "did not have dinner",
             "barely touched",
+            "barely ate",
             "skipped",
             "refused food",
             "not eating",
@@ -232,6 +279,7 @@ class LogExtractor:
     ) -> Observation | None:
         stool_terms = [
             "poop",
+            "poo",
             "stool",
             "diarrhea",
             "便便",
@@ -239,13 +287,43 @@ class LogExtractor:
             "软便",
             "腹泻",
             "拉稀",
+            "blood in stool",
+            "bloody stool",
+            "poop blood",
+            "poo blood",
+            "blood in poop",
+            "blood in poo",
+            "black stool",
+            "tarry stool",
+            "血便",
+            "黑便",
         ]
         no_stool_terms = ["hasn't pooped", "no poop", "没拉", "没拉屎", "不上厕所"]
         if not self._contains_any(text, stool_terms + no_stool_terms):
             return None
 
         stool_quality = "absent"
-        if self._contains_any(text, ["soft", "软便"]):
+        if self._contains_any(
+            text,
+            [
+                "bloody stool",
+                "blood in stool",
+                "poop blood",
+                "pooped blood",
+                "pooping blood",
+                "poo blood",
+                "pooed blood",
+                "pooing blood",
+                "blood in poop",
+                "blood in poo",
+                "血便",
+                "便血",
+            ],
+        ):
+            stool_quality = "bloody"
+        elif self._contains_any(text, ["black stool", "tarry stool", "黑便"]):
+            stool_quality = "black_tarry"
+        elif self._contains_any(text, ["soft", "软便"]):
             stool_quality = "soft"
         elif self._contains_any(text, ["watery", "diarrhea", "腹泻", "拉稀"]):
             stool_quality = "watery"
@@ -261,7 +339,7 @@ class LogExtractor:
             raw_text=raw_text,
             confidence=0.84,
             health_context={"stool_quality": stool_quality},
-            severity_score=6 if stool_quality == "watery" else 3,
+            severity_score=8 if stool_quality in {"bloody", "black_tarry"} else 6 if stool_quality == "watery" else 3,
             source_guideline_ids=["GL_STOOL_001"],
         )
 
@@ -275,7 +353,7 @@ class LogExtractor:
         source: Source,
         sequence: int,
     ) -> Observation | None:
-        if not self._contains_any(text, ["vomit", "threw up", "throwing up", "呕吐", "吐了"]):
+        if not self._contains_any(text, ["vomit", "threw up", "throw up", "throwing up", "呕吐", "吐了"]):
             return None
 
         return self._base_observation(
@@ -289,6 +367,136 @@ class LogExtractor:
             health_context={"vomiting_reported": True},
             severity_score=7,
             source_guideline_ids=["GL_VOMITING_001"],
+        )
+
+    def _extract_mobility_observation(
+        self,
+        *,
+        raw_text: str,
+        text: str,
+        timestamp: str,
+        species: Species,
+        source: Source,
+        sequence: int,
+    ) -> Observation | None:
+        mobility_terms = [
+            "limp",
+            "limping",
+            "leg",
+            "back leg",
+            "hind leg",
+            "strength",
+            "exercise",
+            "exercice",
+            "rehab",
+            "rehabilitation",
+            "physical therapy",
+            "struggle",
+            "reluctant",
+            "doctor wants",
+            "vet wants",
+            "won't put",
+            "cannot put",
+            "not putting",
+            "non weight",
+            "non-weight",
+            "can't bear weight",
+            "acl",
+            "ccl",
+            "tplo",
+            "tta",
+            "跛",
+            "瘸",
+            "不负重",
+            "脚不着地",
+            "手术",
+            "康复",
+            "复健",
+            "锻炼",
+            "运动",
+            "不愿意",
+        ]
+        if not self._contains_any(text, mobility_terms):
+            return None
+
+        non_weight_bearing = self._contains_any(
+            text,
+            [
+                "won't put",
+                "cannot put",
+                "not putting",
+                "non weight",
+                "non-weight",
+                "can't bear weight",
+                "不负重",
+                "脚不着地",
+            ],
+        )
+        rehab_context = self._contains_any(
+            text,
+            [
+                "exercise",
+                "exercice",
+                "rehab",
+                "rehabilitation",
+                "physical therapy",
+                "doctor wants",
+                "vet wants",
+                "康复",
+                "复健",
+                "锻炼",
+            ],
+        )
+        post_op_context = self._contains_any(
+            text,
+            ["acl", "ccl", "tplo", "tta", "surgery", "post-op", "术后", "手术"],
+        ) or (rehab_context and self._contains_any(text, ["leg", "recover", "strength", "腿"]))
+        context = {
+            "mobility": "limping",
+            "weight_bearing": "non_weight_bearing" if non_weight_bearing else "partial_weight_bearing",
+            "post_op_context": post_op_context,
+        }
+        if rehab_context:
+            context["rehab_exercise"] = True
+
+        return self._base_observation(
+            sequence=sequence,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            category=ObservationCategory.mobility,
+            raw_text=raw_text,
+            confidence=0.84,
+            health_context=context,
+            severity_score=8 if non_weight_bearing and post_op_context else 6,
+            source_guideline_ids=["GL_LAMENESS_001", "GL_ACL_POSTOP_001"] if post_op_context else ["GL_LAMENESS_001"],
+        )
+
+    def _extract_medication_observation(
+        self,
+        *,
+        raw_text: str,
+        text: str,
+        timestamp: str,
+        species: Species,
+        source: Source,
+        sequence: int,
+    ) -> Observation | None:
+        medication_terms = ["nsaid", "rimadyl", "carprofen", "meloxicam", "pain med", "pain medication", "止痛药", "消炎药", "药"]
+        if not self._contains_any(text, medication_terms):
+            return None
+
+        return self._base_observation(
+            sequence=sequence,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            category=ObservationCategory.medication_note,
+            raw_text=raw_text,
+            confidence=0.78,
+            health_context={"nsaid_or_pain_med_context": True},
+            severity_score=5,
+            source_guideline_ids=["GL_NSAID_SIDE_EFFECT_001", "GL_MEDICATION_SAFETY_001"],
         )
 
     def _extract_energy_observation(
@@ -327,6 +535,172 @@ class LogExtractor:
             severity_score=6 if value == "low" else 2,
             source_guideline_ids=["GL_LETHARGY_001"] if value == "low" else [],
         )
+
+    def _extract_condition_triage_observation(
+        self,
+        *,
+        raw_text: str,
+        text: str,
+        timestamp: str,
+        species: Species,
+        source: Source,
+        sequence: int,
+    ) -> Observation | None:
+        domain = self._condition_domain(text)
+        if domain is None:
+            return None
+
+        context = self._condition_context(text=text, domain=domain)
+        category = {
+            "gi": ObservationCategory.stool,
+            "oral_neck": ObservationCategory.other,
+            "mobility": ObservationCategory.mobility,
+            "skin_lump": ObservationCategory.other,
+            "urinary": ObservationCategory.urination,
+            "respiratory": ObservationCategory.other,
+        }[domain]
+        guideline_ids = {
+            "gi": ["GL_CONDITION_GI_001"],
+            "oral_neck": ["GL_CONDITION_ORAL_NECK_001"],
+            "mobility": ["GL_CONDITION_MOBILITY_001", "GL_LAMENESS_001"],
+            "skin_lump": ["GL_CONDITION_SKIN_LUMP_001"],
+            "urinary": ["GL_CONDITION_URINARY_001"],
+            "respiratory": ["GL_CONDITION_RESPIRATORY_001"],
+        }[domain]
+        if domain == "mobility" and context.get("post_op_context"):
+            guideline_ids.append("GL_ACL_POSTOP_001")
+
+        return self._base_observation(
+            sequence=sequence,
+            timestamp=timestamp,
+            species=species,
+            source=source,
+            category=category,
+            raw_text=raw_text,
+            confidence=0.76,
+            health_context=context,
+            severity_score=8 if context.get("urgent_red_flag") else 6,
+            source_guideline_ids=guideline_ids,
+        )
+
+    def _condition_domain(self, text: str) -> str | None:
+        has_question_intent = self._contains_any(text, TRIAGE_INTENT_TERMS)
+        domains = [
+            ("respiratory", ["cough", "coughing", "breathing", "breath", "wheezing", "喘", "咳", "呼吸"]),
+            ("urinary", ["urine", "pee", "peeing", "urinate", "urinating", "blood in urine", "尿", "尿血"]),
+            ("oral_neck", ["drool", "drooling", "saliva", "salivary", "jaw", "neck", "under jaw", "mouth", "oral", "流口水", "下巴", "脖子", "口腔"]),
+            ("skin_lump", ["skin", "itch", "itching", "scratch", "scratching", "lump", "bump", "mass", "swelling", "皮肤", "痒", "包", "肿块"]),
+            ("mobility", ["limp", "limping", "leg", "paw", "walk", "walking", "post-op", "acl", "ccl", "腿", "跛", "瘸", "术后"]),
+            ("gi", ["vomit", "diarrhea", "stool", "poop", "gastroenteritis", "parvo", "appetite", "吐", "拉稀", "腹泻", "肠胃炎", "细小", "便便"]),
+        ]
+        for domain, terms in domains:
+            red_flag_triggers_triage = domain in {"urinary", "respiratory"} and self._condition_red_flag_present(text, domain)
+            if self._contains_any(text, terms) and (has_question_intent or red_flag_triggers_triage):
+                return domain
+        return None
+
+    def _condition_context(self, *, text: str, domain: str) -> dict[str, object]:
+        context: dict[str, object] = {
+            "condition_triage": True,
+            "condition_domain": domain,
+            "asked_condition": self._asked_condition(text),
+            "possible_categories": self._possible_categories(domain),
+            "red_flags": self._red_flags(text, domain),
+            "record_fields": self._record_fields(domain),
+        }
+        if domain == "urinary" and self._contains_any(
+            text,
+            self._urinary_obstruction_terms(),
+        ):
+            context["urinary_obstruction"] = True
+            context["urgent_red_flag"] = True
+        if domain == "respiratory" and self._contains_any(
+            text,
+            ["hard to breathe", "trouble breathing", "labored breathing", "blue gums", "collapse", "breathing hard", "呼吸困难", "喘不过气"],
+        ):
+            context["respiratory_distress"] = True
+            context["urgent_red_flag"] = True
+        if domain == "oral_neck" and self._contains_any(text, ["drool", "drooling", "swallow", "breathing", "流口水", "吞咽"]):
+            context["oral_neck_function_change"] = True
+        if domain == "mobility" and self._contains_any(text, ["post-op", "surgery", "acl", "ccl", "术后", "手术"]):
+            context["post_op_context"] = True
+        return context
+
+    def _condition_red_flag_present(self, text: str, domain: str) -> bool:
+        return bool(self._red_flags(text, domain))
+
+    def _asked_condition(self, text: str) -> str | None:
+        condition_terms = [
+            "gastroenteritis",
+            "parvo",
+            "salivary mucocele",
+            "salivary cyst",
+            "uti",
+            "urinary tract infection",
+            "infection",
+            "肠胃炎",
+            "细小",
+            "唾液腺囊肿",
+            "尿路感染",
+        ]
+        for term in condition_terms:
+            if term in text:
+                return term
+        return None
+
+    def _possible_categories(self, domain: str) -> list[str]:
+        return {
+            "gi": ["dietary upset", "gastroenteritis", "parasites", "foreign material", "medication side effects", "infectious disease"],
+            "oral_neck": ["salivary mucocele", "dental or oral disease", "trauma", "abscess", "lymph node swelling", "another mass"],
+            "mobility": ["strain", "joint injury", "paw injury", "post-operative complication", "pain"],
+            "skin_lump": ["allergy", "insect bite", "skin infection", "cyst", "trauma", "mass"],
+            "urinary": ["urinary tract irritation or infection", "bladder stones", "inflammation", "urinary blockage"],
+            "respiratory": ["airway irritation", "respiratory infection", "heart or lung concern", "allergy", "foreign material"],
+        }[domain]
+
+    def _red_flags(self, text: str, domain: str) -> list[str]:
+        flags_by_domain = {
+            "gi": [
+                ("vomiting repeats", ["repeated vomiting", "vomiting again", "vomit multiple", "一直吐"]),
+                ("bloody or black/tarry stool", ["bloody stool", "blood in stool", "black stool", "tarry stool", "血便", "黑便"]),
+                ("lethargy or refusal to eat/drink", ["letharg", "won't eat", "refuses food", "refuses water", "不吃", "不喝"]),
+            ],
+            "oral_neck": [
+                ("trouble swallowing or breathing", ["trouble swallowing", "can't swallow", "breathing", "吞咽", "呼吸"]),
+                ("rapid swelling or severe pain", ["rapid", "getting bigger", "pain", "疼", "变大"]),
+            ],
+            "mobility": [
+                ("non-weight-bearing or worsening pain", ["non weight", "non-weight", "can't bear weight", "worse", "pain", "不负重", "疼"]),
+            ],
+            "skin_lump": [
+                ("rapid growth, bleeding, discharge, or pain", ["rapid", "growing", "bleeding", "discharge", "pain", "流血", "流脓", "疼"]),
+            ],
+            "urinary": [
+                ("cannot urinate or repeated straining with little urine", self._urinary_obstruction_terms()),
+                ("blood in urine", ["blood in urine", "bloody urine", "尿血"]),
+            ],
+            "respiratory": [
+                ("labored breathing, blue/pale gums, collapse, or severe distress", ["hard to breathe", "trouble breathing", "labored breathing", "blue gums", "pale gums", "collapse", "breathing hard", "呼吸困难"]),
+            ],
+        }
+        return [
+            label
+            for label, terms in flags_by_domain[domain]
+            if self._contains_any(text, terms)
+        ]
+
+    def _urinary_obstruction_terms(self) -> list[str]:
+        return URINARY_OBSTRUCTION_TERMS
+
+    def _record_fields(self, domain: str) -> list[str]:
+        return {
+            "gi": ["vomiting frequency", "stool quality", "appetite", "water intake", "energy", "medication use", "possible exposures"],
+            "oral_neck": ["location", "size", "firmness", "mobility", "pain", "drooling", "eating or swallowing changes", "growth speed"],
+            "mobility": ["affected limb", "weight-bearing ability", "pain signs", "swelling", "activity change", "recent injury or surgery"],
+            "skin_lump": ["size", "location", "color", "texture", "itchiness", "pain", "discharge", "growth speed", "photos"],
+            "urinary": ["frequency", "amount", "straining", "blood", "accidents", "water intake", "whether urine is passing"],
+            "respiratory": ["cough timing", "frequency", "triggers", "resting breathing rate", "gum color", "energy", "appetite", "exposures"],
+        }[domain]
 
     def _base_observation(
         self,
@@ -548,4 +922,4 @@ class LogExtractor:
         return values
 
     def _contains_any(self, text: str, terms: Iterable[str]) -> bool:
-        return any(term in text for term in terms)
+        return contains_any(text, terms)

@@ -51,6 +51,42 @@ def test_safety_agent_blocks_diagnosis() -> None:
     assert "diagnosis" in review.blocked_content
 
 
+def test_safety_agent_blocks_condition_triage_diagnosis_terms() -> None:
+    recommendation = FinalRecommendation(
+        risk_level=6,
+        risk_band="moderate",
+        summary="Your dog has salivary mucocele.",
+        recommendation="Contact a vet.",
+        owner_message="Your dog has UTI and has gastroenteritis.",
+        escalation_conditions=["symptoms worsen"],
+        safety_checked=True,
+        source_guideline_ids=["GL_CONDITION_ORAL_NECK_001"],
+    )
+
+    review = SafetyAgent().review_recommendation(recommendation)
+
+    assert review.diagnosis_present is True
+    assert "diagnosis" in review.blocked_content
+
+
+def test_safety_agent_blocks_related_case_diagnosis_phrasing() -> None:
+    recommendation = FinalRecommendation(
+        risk_level=6,
+        risk_band="moderate",
+        summary="Your dog has ACL tear.",
+        recommendation="Similar cases confirm this is patellar luxation.",
+        owner_message="Your dog has urinary blockage.",
+        escalation_conditions=["symptoms worsen"],
+        safety_checked=True,
+        source_guideline_ids=["GL_CONDITION_MOBILITY_001"],
+    )
+
+    review = SafetyAgent().review_recommendation(recommendation)
+
+    assert review.diagnosis_present is True
+    assert "diagnosis" in review.blocked_content
+
+
 def test_safety_agent_blocks_medication_dosage_advice() -> None:
     recommendation = FinalRecommendation(
         risk_level=5,
