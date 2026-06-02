@@ -21,6 +21,13 @@ from pawcare.services.knowledge_summarizer import (
     OpenAIKnowledgeSummarizer,
     build_knowledge_summarizer,
 )
+from pawcare.services.llm_signal_screening_service import (
+    DeterministicLLMSignalScreeningService,
+    LLMSignalScreeningResult,
+    LLMSignalScreeningService,
+    OpenAILLMSignalScreeningService,
+    build_llm_signal_screening_service,
+)
 from pawcare.services.in_memory_pet_repository import InMemoryPetRepository
 from pawcare.services.pet_message_service import PetMessageService
 from pawcare.services.pet_models import PetRecord, UserAccount
@@ -56,5 +63,10 @@ __all__ = [
     "SimilarCaseService",
     "UserAccount",
     "DeterministicKnowledgeSummarizer",
+    "DeterministicLLMSignalScreeningService",
+    "LLMSignalScreeningResult",
+    "LLMSignalScreeningService",
     "build_knowledge_summarizer",
+    "OpenAILLMSignalScreeningService",
+    "build_llm_signal_screening_service",
 ]

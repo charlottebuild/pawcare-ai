@@ -38,6 +38,29 @@ class BehaviorAgent:
         ]
 
         if not social_observations:
+            llm_screening = self._llm_screening(active_context)
+            if llm_screening:
+                return self._output(
+                    active_context=active_context,
+                    observations=observations,
+                    conclusion="moderate LLM behavior screening concern",
+                    confidence=float(llm_screening.get("confidence") or 0.6),
+                    missing_information=["body_language", "trigger", "duration"],
+                    proposed_update=ProposedUpdate(
+                        target_path="risk_assessment.risk_factors",
+                        operation="append",
+                        value=(
+                            "LLM screening suggested behavior review: "
+                            + self._screening_summary(llm_screening)
+                        ),
+                    ),
+                    reasoning_trace=self._with_behavior_context(
+                        active_context,
+                        "LLM screening provided supplementary behavior signal review. "
+                        + self._screening_summary(llm_screening),
+                    ),
+                    source_guideline_ids=self._llm_guideline_ids(llm_screening),
+                )
             return self._output(
                 active_context=active_context,
                 observations=observations,
@@ -264,3 +287,51 @@ class BehaviorAgent:
         if not names:
             return trace
         return trace + " Behavior context: " + "; ".join(names[:3]) + "."
+
+    def _llm_screening(self, active_context: ActiveContext) -> dict[str, object]:
+        screening = active_context.relevant_baseline.get("llm_screening", {})
+        if not isinstance(screening, dict):
+            return {}
+        domains = {
+            str(item)
+            for item in screening.get("possible_domains", [])
+            if str(item)
+        }
+        guideline_ids = {
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item).startswith("GL_")
+        }
+        behavior_domains = {"behavior", "social", "anxiety", "resource_guarding", "stress"}
+        if domains & behavior_domains or guideline_ids & {
+            "GL_SOCIAL_STRESS_001",
+            "GL_RESOURCE_GUARDING_001",
+            "GL_SOCIAL_PLAY_001",
+        }:
+            return screening
+        return {}
+
+    def _llm_guideline_ids(self, screening: dict[str, object]) -> list[str]:
+        guideline_ids = [
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item)
+            in {
+                "GL_SOCIAL_STRESS_001",
+                "GL_RESOURCE_GUARDING_001",
+                "GL_SOCIAL_PLAY_001",
+            }
+        ]
+        return guideline_ids[:3] or ["GL_SOCIAL_STRESS_001"]
+
+    def _screening_summary(self, screening: dict[str, object]) -> str:
+        summary = str(screening.get("reasoning_summary") or "").strip()
+        if summary:
+            return summary
+        terms = [
+            str(item)
+            for item in screening.get("suggested_canonical_terms", [])
+            if str(item)
+        ]
+        domains = [str(item) for item in screening.get("possible_domains", []) if str(item)]
+        return ", ".join(terms or domains or ["possible behavior signal"])

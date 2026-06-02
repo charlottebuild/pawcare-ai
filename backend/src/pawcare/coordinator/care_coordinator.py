@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from pawcare.agents import BehaviorAgent, CommunicationAgent, HealthAgent, SafetyAgent
@@ -22,9 +23,14 @@ from pawcare.schemas.state import (
     Species,
 )
 from pawcare.services.behavior_reference_service import BehaviorReferenceService
+from pawcare.services.llm_signal_screening_service import (
+    LLMSignalScreeningService,
+    build_llm_signal_screening_service,
+)
 from pawcare.services.pet_models import PetRecord
 from pawcare.services.professional_reference_service import ProfessionalReferenceService
 from pawcare.skills import LogExtractor
+from pawcare.skills.symptom_understanding import has_care_context_trigger
 
 HEALTH_OBSERVATION_CATEGORIES = {
     "food_intake",
@@ -61,6 +67,7 @@ class CareCoordinator:
         communication_agent: CommunicationAgent | None = None,
         professional_reference_service: ProfessionalReferenceService | None = None,
         behavior_reference_service: BehaviorReferenceService | None = None,
+        llm_signal_screening_service: LLMSignalScreeningService | None = None,
     ) -> None:
         self.log_extractor = log_extractor or LogExtractor()
         self.behavior_agent = behavior_agent or BehaviorAgent()
@@ -72,6 +79,9 @@ class CareCoordinator:
         )
         self.behavior_reference_service = (
             behavior_reference_service or BehaviorReferenceService()
+        )
+        self.llm_signal_screening_service = (
+            llm_signal_screening_service or build_llm_signal_screening_service()
         )
 
     def handle_log(
@@ -86,6 +96,60 @@ class CareCoordinator:
         health_baseline: HealthBaseline,
         species: Species = Species.dog,
     ) -> CoordinatorResult:
+        state = self._build_initial_state(
+            workflow_id=workflow_id,
+            dog_id=dog_id,
+            raw_text=raw_text,
+            timestamp=timestamp,
+            dog_profile=dog_profile,
+            behavioral_baseline=behavioral_baseline,
+            health_baseline=health_baseline,
+            species=species,
+        )
+        return self._finalize_worker_results(
+            state=state,
+            worker_results=self._run_worker_agents(state=state),
+        )
+
+    async def handle_log_async(
+        self,
+        *,
+        workflow_id: str,
+        dog_id: str,
+        raw_text: str,
+        timestamp: str,
+        dog_profile: DogProfile,
+        behavioral_baseline: BehavioralBaseline,
+        health_baseline: HealthBaseline,
+        species: Species = Species.dog,
+    ) -> CoordinatorResult:
+        state = self._build_initial_state(
+            workflow_id=workflow_id,
+            dog_id=dog_id,
+            raw_text=raw_text,
+            timestamp=timestamp,
+            dog_profile=dog_profile,
+            behavioral_baseline=behavioral_baseline,
+            health_baseline=health_baseline,
+            species=species,
+        )
+        return self._finalize_worker_results(
+            state=state,
+            worker_results=await self._run_worker_agents_async(state=state),
+        )
+
+    def _build_initial_state(
+        self,
+        *,
+        workflow_id: str,
+        dog_id: str,
+        raw_text: str,
+        timestamp: str,
+        dog_profile: DogProfile,
+        behavioral_baseline: BehavioralBaseline,
+        health_baseline: HealthBaseline,
+        species: Species,
+    ) -> PawCareState:
         batch = self.log_extractor.extract(
             dog_id=dog_id,
             raw_text=raw_text,
@@ -93,7 +157,7 @@ class CareCoordinator:
             species=species,
         )
 
-        state = PawCareState(
+        return PawCareState(
             workflow_id=workflow_id,
             dog_id=dog_id,
             dog_profile=dog_profile,
@@ -106,10 +170,16 @@ class CareCoordinator:
             observations=batch.observations,
         )
 
+    def _finalize_worker_results(
+        self,
+        *,
+        state: PawCareState,
+        worker_results: list[tuple[ActiveContext, AgentOutput]],
+    ) -> CoordinatorResult:
         accepted_updates: list[ProposedUpdate] = []
         rejected_updates: list[ProposedUpdate] = []
 
-        for active_context, output in self._run_worker_agents(state=state):
+        for active_context, output in worker_results:
             state.active_context = active_context
             state.agent_outputs.append(output)
             if output.proposed_update is not None:
@@ -144,28 +214,84 @@ class CareCoordinator:
 
         health_context = self._build_health_active_context(state=state)
         if health_context.current_observation_ids:
-            health_output = self.health_agent.analyze(
-                active_context=health_context,
-                observations=[
-                    observation
-                    for observation in state.observations
-                    if observation.observation_id in health_context.current_observation_ids
-                ],
+            results.append(
+                self._run_health_agent(state=state, active_context=health_context)
             )
-            results.append((health_context, health_output))
 
         behavior_context = self._build_behavior_active_context(state=state)
         if behavior_context.current_observation_ids:
-            behavior_output = self.behavior_agent.analyze(
-                active_context=behavior_context,
-                observations=[
-                    observation
-                    for observation in state.observations
-                    if observation.observation_id in behavior_context.current_observation_ids
-                ],
+            results.append(
+                self._run_behavior_agent(state=state, active_context=behavior_context)
             )
-            results.append((behavior_context, behavior_output))
         return results
+
+    async def _run_worker_agents_async(
+        self, *, state: PawCareState
+    ) -> list[tuple[ActiveContext, AgentOutput]]:
+        health_context = self._build_health_active_context(state=state)
+        behavior_context = self._build_behavior_active_context(state=state)
+        tasks: list[asyncio.Task[tuple[ActiveContext, AgentOutput]]] = []
+
+        if health_context.current_observation_ids:
+            tasks.append(
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        self._run_health_agent,
+                        state=state,
+                        active_context=health_context,
+                    )
+                )
+            )
+        if behavior_context.current_observation_ids:
+            tasks.append(
+                asyncio.create_task(
+                    asyncio.to_thread(
+                        self._run_behavior_agent,
+                        state=state,
+                        active_context=behavior_context,
+                    )
+                )
+            )
+        if not tasks:
+            return []
+        return list(await asyncio.gather(*tasks))
+
+    def _run_health_agent(
+        self, *, state: PawCareState, active_context: ActiveContext
+    ) -> tuple[ActiveContext, AgentOutput]:
+        return (
+            active_context,
+            self.health_agent.analyze(
+                active_context=active_context,
+                observations=self._observations_for_context(
+                    state=state,
+                    active_context=active_context,
+                ),
+            ),
+        )
+
+    def _run_behavior_agent(
+        self, *, state: PawCareState, active_context: ActiveContext
+    ) -> tuple[ActiveContext, AgentOutput]:
+        return (
+            active_context,
+            self.behavior_agent.analyze(
+                active_context=active_context,
+                observations=self._observations_for_context(
+                    state=state,
+                    active_context=active_context,
+                ),
+            ),
+        )
+
+    def _observations_for_context(
+        self, *, state: PawCareState, active_context: ActiveContext
+    ) -> list:
+        return [
+            observation
+            for observation in state.observations
+            if observation.observation_id in active_context.current_observation_ids
+        ]
 
     def _build_health_active_context(self, *, state: PawCareState) -> ActiveContext:
         health_observation_ids = [
@@ -174,6 +300,11 @@ class CareCoordinator:
             if observation.category in HEALTH_OBSERVATION_CATEGORIES
             or (observation.health_context or {}).get("condition_triage")
         ]
+        llm_screening = self._llm_screening_payload(state=state, target="health")
+        if llm_screening and not health_observation_ids:
+            health_observation_ids = [
+                observation.observation_id for observation in state.observations
+            ]
 
         return ActiveContext(
             target_agent="HealthAgent",
@@ -185,6 +316,7 @@ class CareCoordinator:
                 "professional_references": self._professional_reference_payload(
                     state=state
                 ),
+                "llm_screening": llm_screening,
             },
             allowed_guideline_ids=[
                 "GL_STOOL_001",
@@ -215,6 +347,11 @@ class CareCoordinator:
             for observation in state.observations
             if observation.category == "social_interaction"
         ]
+        llm_screening = self._llm_screening_payload(state=state, target="behavior")
+        if llm_screening and not social_observation_ids:
+            social_observation_ids = [
+                observation.observation_id for observation in state.observations
+            ]
 
         return ActiveContext(
             target_agent="BehaviorAgent",
@@ -224,6 +361,7 @@ class CareCoordinator:
                 "social_profile": state.behavioral_baseline.social_profile.model_dump(),
                 "resource_guarding_profile": state.behavioral_baseline.resource_guarding_profile.model_dump(),
                 "behavior_references": self._behavior_reference_payload(state=state),
+                "llm_screening": llm_screening,
             },
             allowed_guideline_ids=[
                 "GL_SOCIAL_STRESS_001",
@@ -237,6 +375,29 @@ class CareCoordinator:
                 "What information is missing?",
             ],
         )
+
+    def _llm_screening_payload(
+        self, *, state: PawCareState, target: str
+    ) -> dict[str, object]:
+        raw_text = " ".join(observation.raw_text for observation in state.observations)
+        if not raw_text or has_care_context_trigger(raw_text):
+            return {}
+        result = self.llm_signal_screening_service.screen(
+            raw_text=raw_text,
+            pet_context={
+                "pet_id": state.dog_id,
+                "name": state.dog_profile.name,
+                "species": state.dog_profile.species,
+                "breed": state.dog_profile.breed,
+                "medical_notes": list(state.dog_profile.care_notes),
+            },
+            target=target,
+        )
+        if result.is_empty():
+            return {}
+        payload = result.as_payload()
+        payload["source"] = "llm_signal_screening"
+        return payload
 
     def _professional_reference_payload(self, *, state: PawCareState) -> list[dict[str, object]]:
         raw_text = " ".join(observation.raw_text for observation in state.observations)

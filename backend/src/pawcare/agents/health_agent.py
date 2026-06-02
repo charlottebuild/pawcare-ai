@@ -42,6 +42,28 @@ class HealthAgent:
         ]
 
         if not health_observations:
+            llm_screening = self._llm_screening(active_context)
+            if llm_screening:
+                guideline_ids = self._llm_guideline_ids(llm_screening)
+                return self._output(
+                    observations=observations,
+                    conclusion="moderate LLM health screening concern",
+                    confidence=float(llm_screening.get("confidence") or 0.6),
+                    missing_information=["duration", "severity_change", "photos_or_video"],
+                    proposed_update=ProposedUpdate(
+                        target_path="risk_assessment.risk_factors",
+                        operation="append",
+                        value=(
+                            "LLM screening suggested health review: "
+                            + self._screening_summary(llm_screening)
+                        ),
+                    ),
+                    reasoning_trace=(
+                        "LLM screening provided supplementary health signal review. "
+                        + self._screening_summary(llm_screening)
+                    ),
+                    source_guideline_ids=guideline_ids,
+                )
             return self._output(
                 observations=observations,
                 conclusion="no health evidence",
@@ -248,6 +270,80 @@ class HealthAgent:
             if isinstance(reference, dict) and reference.get("source_name"):
                 names.append(str(reference["source_name"]))
         return names[:3]
+
+    def _llm_screening(self, active_context: ActiveContext) -> dict[str, object]:
+        screening = active_context.relevant_baseline.get("llm_screening", {})
+        if not isinstance(screening, dict):
+            return {}
+        domains = {
+            str(item)
+            for item in screening.get("possible_domains", [])
+            if str(item)
+        }
+        guideline_ids = {
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item).startswith("GL_")
+        }
+        health_domains = {
+            "health",
+            "gi",
+            "oral_neck",
+            "mobility",
+            "skin_lump",
+            "urinary",
+            "respiratory",
+            "neurologic",
+            "abdominal",
+            "eye",
+        }
+        if domains & health_domains or any(
+            guideline_id.startswith("GL_CONDITION_")
+            or guideline_id
+            in {
+                "GL_STOOL_001",
+                "GL_APPETITE_002",
+                "GL_VOMITING_001",
+                "GL_LETHARGY_001",
+                "GL_LAMENESS_001",
+                "GL_ACL_POSTOP_001",
+            }
+            for guideline_id in guideline_ids
+        ):
+            return screening
+        return {}
+
+    def _llm_guideline_ids(self, screening: dict[str, object]) -> list[str]:
+        guideline_ids = [
+            str(item)
+            for item in screening.get("suggested_guideline_ids", [])
+            if str(item).startswith("GL_")
+        ]
+        if guideline_ids:
+            return guideline_ids[:4]
+        domain_map = {
+            "gi": "GL_CONDITION_GI_001",
+            "oral_neck": "GL_CONDITION_ORAL_NECK_001",
+            "mobility": "GL_CONDITION_MOBILITY_001",
+            "skin_lump": "GL_CONDITION_SKIN_LUMP_001",
+            "urinary": "GL_CONDITION_URINARY_001",
+            "respiratory": "GL_CONDITION_RESPIRATORY_001",
+        }
+        domains = [str(item) for item in screening.get("possible_domains", [])]
+        mapped = [domain_map[domain] for domain in domains if domain in domain_map]
+        return mapped[:4] or ["GL_APPETITE_002"]
+
+    def _screening_summary(self, screening: dict[str, object]) -> str:
+        summary = str(screening.get("reasoning_summary") or "").strip()
+        if summary:
+            return summary
+        terms = [
+            str(item)
+            for item in screening.get("suggested_canonical_terms", [])
+            if str(item)
+        ]
+        domains = [str(item) for item in screening.get("possible_domains", []) if str(item)]
+        return ", ".join(terms or domains or ["possible health signal"])
 
     def _output(
         self,
