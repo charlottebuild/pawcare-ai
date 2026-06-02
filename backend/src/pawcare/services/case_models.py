@@ -116,3 +116,29 @@ class KnowledgeMatch:
     relevance_score: int
     relevance_level: str
     source_type: str
+
+
+@dataclass(frozen=True)
+class KnowledgeDocument:
+    document_id: str
+    source_name: str
+    source_url: str
+    domain: str
+    species: list[str]
+    allowed_use: str
+    raw_or_manual_summary: str
+    signals: list[str] = field(default_factory=list)
+    red_flags: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class KnowledgeChunk:
+    chunk_id: str
+    document_id: str
+    chunk_text: str
+    metadata_header: str
+    domain: str
+    signals: list[str]
+    source_name: str
+    source_url: str
+    species: list[str] = field(default_factory=list)

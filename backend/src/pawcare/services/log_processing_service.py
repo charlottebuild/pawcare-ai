@@ -12,6 +12,7 @@ from pawcare.schemas.state import (
     UserResponse,
     UserResponseStatus,
 )
+from pawcare.services.pet_models import DogContextSnapshot
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,7 @@ class LogProcessingService:
         behavioral_baseline: BehavioralBaseline,
         health_baseline: HealthBaseline,
         species: Species = Species.dog,
+        dog_context_snapshot: DogContextSnapshot | None = None,
     ) -> LogProcessingResult:
         coordinator_result = self.coordinator.handle_log(
             workflow_id=workflow_id,
@@ -51,6 +53,7 @@ class LogProcessingService:
             behavioral_baseline=behavioral_baseline,
             health_baseline=health_baseline,
             species=species,
+            dog_context_snapshot=dog_context_snapshot,
         )
         response = self._build_user_response(coordinator_result)
         return LogProcessingResult(

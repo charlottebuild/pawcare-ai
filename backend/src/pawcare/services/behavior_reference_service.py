@@ -11,6 +11,10 @@ from pawcare.schemas.state import (
 )
 from pawcare.services.case_models import BehaviorCareReference, BehaviorReferenceMatch
 from pawcare.services.knowledge_adapters import behavior_reference_to_record
+from pawcare.services.knowledge_fts_index import (
+    SQLiteKnowledgeFTSIndex,
+    seed_professional_knowledge_documents,
+)
 from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
 from pawcare.skills.symptom_understanding import normalize_identifier
 
@@ -23,11 +27,15 @@ class BehaviorReferenceService:
         *,
         references: list[BehaviorCareReference] | None = None,
         knowledge_index: KnowledgeIndex | None = None,
+        fts_index: SQLiteKnowledgeFTSIndex | None = None,
     ) -> None:
         self.references = references or seed_behavior_references()
         self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
             records=[behavior_reference_to_record(reference) for reference in self.references]
         )
+        self.fts_index = fts_index or SQLiteKnowledgeFTSIndex()
+        if fts_index is None:
+            self.fts_index.ingest_documents(seed_professional_knowledge_documents())
 
     def find_matches(
         self,
@@ -43,11 +51,16 @@ class BehaviorReferenceService:
             kinds={"behavior"},
             limit=limit,
         )
+        fts_matches = self.fts_index.search(
+            query_text=" ".join(sorted(query_terms)),
+            domains={"resource_guarding"},
+            limit=limit,
+        )
         return [
             self._to_match(match)
-            for match in matches
+            for match in [*matches, *fts_matches]
             if set(match.matched_signals) & query_terms
-        ]
+        ][:limit]
 
     def as_payload(
         self,

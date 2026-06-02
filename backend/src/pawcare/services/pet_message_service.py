@@ -4,6 +4,7 @@ from pawcare.schemas.state import Observation, ObservationCategory, UserResponse
 from pawcare.services.log_processing_service import LogProcessingService
 from pawcare.services.pet_models import PetRecord
 from pawcare.services.pet_repository import PetRepository
+from pawcare.services.pet_summary_worker import SummaryWorker
 
 
 class PetMessageService:
@@ -14,9 +15,11 @@ class PetMessageService:
         *,
         repository: PetRepository,
         log_processing_service: LogProcessingService | None = None,
+        summary_worker: SummaryWorker | None = None,
     ) -> None:
         self.repository = repository
         self.log_processing_service = log_processing_service or LogProcessingService()
+        self.summary_worker = summary_worker or SummaryWorker()
 
     def process_message(
         self,
@@ -28,6 +31,7 @@ class PetMessageService:
         workflow_id: str | None = None,
     ) -> UserResponse:
         pet = self.repository.get_pet(user_id=user_id, pet_id=pet_id)
+        snapshot = self.repository.get_context_snapshot(user_id=user_id, pet_id=pet_id)
         log_result = self.log_processing_service.process_log(
             workflow_id=workflow_id
             or self._workflow_id(user_id=user_id, pet_id=pet_id, pet=pet),
@@ -38,6 +42,7 @@ class PetMessageService:
             behavioral_baseline=pet.behavioral_baseline,
             health_baseline=pet.health_baseline,
             species=pet.dog_profile.species,
+            dog_context_snapshot=snapshot,
         )
         observations_to_append = self._dedupe_meal_observations(
             existing_observations=pet.observations,
@@ -47,6 +52,11 @@ class PetMessageService:
             user_id=user_id,
             pet_id=pet_id,
             observations=observations_to_append,
+        )
+        self.summary_worker.rebuild_for_pet(
+            repository=self.repository,
+            user_id=user_id,
+            pet_id=pet_id,
         )
         return log_result.response
 

@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from pawcare.schemas.state import Observation
-from pawcare.services.pet_models import PetRecord, UserAccount
+from pawcare.services.pet_models import (
+    DailyPetSummary,
+    DogContextSnapshot,
+    MonthlyPetSummary,
+    PetRecord,
+    UserAccount,
+    WeeklyPetSummary,
+)
 from pawcare.services.pet_repository import PetRecordAccessError
 
 
@@ -11,6 +18,9 @@ class InMemoryPetRepository:
     def __init__(self) -> None:
         self._users: dict[str, UserAccount] = {}
         self._pets: dict[tuple[str, str], PetRecord] = {}
+        self._daily_summaries: dict[tuple[str, str], list[DailyPetSummary]] = {}
+        self._weekly_summaries: dict[tuple[str, str], list[WeeklyPetSummary]] = {}
+        self._monthly_summaries: dict[tuple[str, str], list[MonthlyPetSummary]] = {}
 
     def create_user(self, user: UserAccount) -> UserAccount:
         self._users[user.user_id] = user
@@ -51,3 +61,57 @@ class InMemoryPetRepository:
         pet = self.get_pet(user_id=user_id, pet_id=pet_id)
         pet.observations.extend(observations)
         return pet
+
+    def save_daily_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        self._daily_summaries[(user_id, pet_id)] = list(summaries)
+
+    def save_weekly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[WeeklyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        self._weekly_summaries[(user_id, pet_id)] = list(summaries)
+
+    def save_monthly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[MonthlyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        self._monthly_summaries[(user_id, pet_id)] = list(summaries)
+
+    def get_daily_summaries(self, *, user_id: str, pet_id: str) -> list[DailyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        return list(self._daily_summaries.get((user_id, pet_id), []))
+
+    def get_weekly_summaries(self, *, user_id: str, pet_id: str) -> list[WeeklyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        return list(self._weekly_summaries.get((user_id, pet_id), []))
+
+    def get_monthly_summaries(self, *, user_id: str, pet_id: str) -> list[MonthlyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        return list(self._monthly_summaries.get((user_id, pet_id), []))
+
+    def get_context_snapshot(self, *, user_id: str, pet_id: str) -> DogContextSnapshot:
+        pet = self.get_pet(user_id=user_id, pet_id=pet_id)
+        daily = self.get_daily_summaries(user_id=user_id, pet_id=pet_id)
+        weekly = self.get_weekly_summaries(user_id=user_id, pet_id=pet_id)
+        monthly = self.get_monthly_summaries(user_id=user_id, pet_id=pet_id)
+        active_issues = [issue for summary in daily[-3:] for issue in summary.active_issues]
+        recent_trends = [summary.summary for summary in weekly[-2:] or daily[-3:]]
+        flags = [
+            flag
+            for summary in [*monthly[-3:], *weekly[-4:], *daily[-7:]]
+            for flag in summary.important_flags
+        ]
+        return DogContextSnapshot(
+            user_id=user_id,
+            pet_id=pet_id,
+            pet_profile=pet.dog_profile.model_dump(),
+            health_baseline=pet.health_baseline.model_dump(),
+            behavioral_baseline=pet.behavioral_baseline.model_dump(),
+            active_issues=sorted(set(active_issues)),
+            recent_trends=recent_trends,
+            important_historical_flags=sorted(set(flags)),
+            recent_summary=" ".join(recent_trends[:3]),
+        )
