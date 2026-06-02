@@ -6,6 +6,7 @@ from pawcare.services import (
     PetRecord,
     PetRecordAccessError,
     SQLitePetRepository,
+    SummaryWorker,
     UserAccount,
 )
 
@@ -135,3 +136,33 @@ def test_sqlite_repository_raises_unified_access_error_without_appending(tmp_pat
 
     after = len(repository.get_pet(user_id="user_456", pet_id="dog_luna").observations)
     assert after == before
+
+
+def test_sqlite_repository_persists_pet_memory_summaries(tmp_path) -> None:
+    db_path = tmp_path / "pawcare.sqlite3"
+    repository = SQLitePetRepository(db_path)
+    repository.create_pet(
+        _pet_record(user_id="user_123", pet_id="dog_mochi", name="Mochi")
+    )
+    PetMessageService(repository=repository).process_message(
+        user_id="user_123",
+        pet_id="dog_mochi",
+        raw_text="Mochi had bloody stool after breakfast.",
+        timestamp="2026-05-08T09:15:00-07:00",
+        workflow_id="wf_sqlite_memory_001",
+    )
+    SummaryWorker().rebuild_for_pet(
+        repository=repository,
+        user_id="user_123",
+        pet_id="dog_mochi",
+    )
+
+    reopened = SQLitePetRepository(db_path)
+    daily = reopened.get_daily_summaries(user_id="user_123", pet_id="dog_mochi")
+    snapshot = reopened.get_context_snapshot(user_id="user_123", pet_id="dog_mochi")
+
+    assert len(daily) == 1
+    assert daily[0].date == "2026-05-08"
+    assert "bloody stool" in daily[0].active_issues
+    assert "bloody stool" in snapshot.active_issues
+    assert snapshot.pet_profile["name"] == "Mochi"

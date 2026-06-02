@@ -4,6 +4,7 @@ import time
 from pawcare.coordinator import CareCoordinator
 from pawcare.agents import BehaviorAgent, HealthAgent
 from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline
+from pawcare.services import DogContextSnapshot
 from pawcare.services.llm_signal_screening_service import LLMSignalScreeningResult
 
 
@@ -175,6 +176,40 @@ def test_coordinator_passes_professional_references_to_health_agent() -> None:
     assert state.active_context.relevant_baseline["professional_references"]
     assert "Professional context:" in health_output.reasoning_trace
     assert "Merck Veterinary Manual" in health_output.reasoning_trace
+
+
+def test_coordinator_passes_compact_pet_memory_snapshot_not_full_history() -> None:
+    snapshot = DogContextSnapshot(
+        user_id="user_123",
+        pet_id="dog_123",
+        pet_profile={"id": "dog_123", "name": "Mochi", "species": "dog"},
+        health_baseline={"normal_appetite": "high"},
+        behavioral_baseline={"general_temperament": "food_motivated"},
+        active_issues=["historic oral swelling"],
+        recent_trends=["Last week appetite was normal."],
+        important_historical_flags=["2023 oral salivary concern discussed with vet"],
+        recent_summary="Last week appetite was normal.",
+    )
+
+    result = CareCoordinator().handle_log(
+        workflow_id="wf_memory_001",
+        dog_id="dog_123",
+        raw_text="Mochi barely touched breakfast.",
+        timestamp="2026-05-08T08:00:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+        dog_context_snapshot=snapshot,
+    )
+
+    context_snapshot = result.state.active_context.relevant_baseline[
+        "dog_context_snapshot"
+    ]
+    assert context_snapshot["active_issues"] == ["historic oral swelling"]
+    assert context_snapshot["important_historical_flags"] == [
+        "2023 oral salivary concern discussed with vet"
+    ]
+    assert "observations" not in context_snapshot
 
 
 class _FakeScreeningService:

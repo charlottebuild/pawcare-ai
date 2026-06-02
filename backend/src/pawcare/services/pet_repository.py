@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import Protocol
 
 from pawcare.schemas.state import Observation
-from pawcare.services.pet_models import PetRecord, UserAccount
+from pawcare.services.pet_models import (
+    DailyPetSummary,
+    DogContextSnapshot,
+    MonthlyPetSummary,
+    PetRecord,
+    UserAccount,
+    WeeklyPetSummary,
+)
 
 
 class PetRecordAccessError(Exception):
@@ -28,3 +35,25 @@ class PetRepository(Protocol):
         pet_id: str,
         observations: list[Observation],
     ) -> PetRecord: ...
+
+    def save_daily_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]
+    ) -> None: ...
+
+    def save_weekly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[WeeklyPetSummary]
+    ) -> None: ...
+
+    def save_monthly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[MonthlyPetSummary]
+    ) -> None: ...
+
+    def get_daily_summaries(self, *, user_id: str, pet_id: str) -> list[DailyPetSummary]: ...
+
+    def get_weekly_summaries(self, *, user_id: str, pet_id: str) -> list[WeeklyPetSummary]: ...
+
+    def get_monthly_summaries(self, *, user_id: str, pet_id: str) -> list[MonthlyPetSummary]: ...
+
+    def get_context_snapshot(
+        self, *, user_id: str, pet_id: str
+    ) -> DogContextSnapshot: ...

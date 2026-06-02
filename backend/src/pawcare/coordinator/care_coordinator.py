@@ -27,7 +27,7 @@ from pawcare.services.llm_signal_screening_service import (
     LLMSignalScreeningService,
     build_llm_signal_screening_service,
 )
-from pawcare.services.pet_models import PetRecord
+from pawcare.services.pet_models import DogContextSnapshot, PetRecord
 from pawcare.services.professional_reference_service import ProfessionalReferenceService
 from pawcare.skills import LogExtractor
 from pawcare.skills.symptom_understanding import has_care_context_trigger
@@ -95,6 +95,7 @@ class CareCoordinator:
         behavioral_baseline: BehavioralBaseline,
         health_baseline: HealthBaseline,
         species: Species = Species.dog,
+        dog_context_snapshot: DogContextSnapshot | None = None,
     ) -> CoordinatorResult:
         state = self._build_initial_state(
             workflow_id=workflow_id,
@@ -105,6 +106,7 @@ class CareCoordinator:
             behavioral_baseline=behavioral_baseline,
             health_baseline=health_baseline,
             species=species,
+            dog_context_snapshot=dog_context_snapshot,
         )
         return self._finalize_worker_results(
             state=state,
@@ -122,6 +124,7 @@ class CareCoordinator:
         behavioral_baseline: BehavioralBaseline,
         health_baseline: HealthBaseline,
         species: Species = Species.dog,
+        dog_context_snapshot: DogContextSnapshot | None = None,
     ) -> CoordinatorResult:
         state = self._build_initial_state(
             workflow_id=workflow_id,
@@ -132,6 +135,7 @@ class CareCoordinator:
             behavioral_baseline=behavioral_baseline,
             health_baseline=health_baseline,
             species=species,
+            dog_context_snapshot=dog_context_snapshot,
         )
         return self._finalize_worker_results(
             state=state,
@@ -149,6 +153,7 @@ class CareCoordinator:
         behavioral_baseline: BehavioralBaseline,
         health_baseline: HealthBaseline,
         species: Species,
+        dog_context_snapshot: DogContextSnapshot | None,
     ) -> PawCareState:
         batch = self.log_extractor.extract(
             dog_id=dog_id,
@@ -166,6 +171,16 @@ class CareCoordinator:
             current_session_state=CurrentSessionState(
                 is_active=True,
                 last_interaction_timestamp=timestamp,
+            ),
+            active_context=ActiveContext(
+                target_agent="Coordinator",
+                task="Prepare current turn with compact pet memory snapshot.",
+                current_observation_ids=[],
+                relevant_baseline={
+                    "dog_context_snapshot": (
+                        dog_context_snapshot.__dict__ if dog_context_snapshot else {}
+                    )
+                },
             ),
             observations=batch.observations,
         )
@@ -313,6 +328,9 @@ class CareCoordinator:
             relevant_baseline={
                 "health_baseline": state.health_baseline.model_dump(),
                 "medical_notes": state.dog_profile.care_notes,
+                "dog_context_snapshot": state.active_context.relevant_baseline.get(
+                    "dog_context_snapshot", {}
+                ),
                 "professional_references": self._professional_reference_payload(
                     state=state
                 ),
@@ -360,6 +378,9 @@ class CareCoordinator:
             relevant_baseline={
                 "social_profile": state.behavioral_baseline.social_profile.model_dump(),
                 "resource_guarding_profile": state.behavioral_baseline.resource_guarding_profile.model_dump(),
+                "dog_context_snapshot": state.active_context.relevant_baseline.get(
+                    "dog_context_snapshot", {}
+                ),
                 "behavior_references": self._behavior_reference_payload(state=state),
                 "llm_screening": llm_screening,
             },

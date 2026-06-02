@@ -11,7 +11,14 @@ from pawcare.schemas.state import (
     HealthBaseline,
     Observation,
 )
-from pawcare.services.pet_models import PetRecord, UserAccount
+from pawcare.services.pet_models import (
+    DailyPetSummary,
+    DogContextSnapshot,
+    MonthlyPetSummary,
+    PetRecord,
+    UserAccount,
+    WeeklyPetSummary,
+)
 from pawcare.services.pet_repository import PetRecordAccessError
 
 
@@ -150,6 +157,126 @@ class SQLitePetRepository:
                 )
         return self.get_pet(user_id=user_id, pet_id=pet_id)
 
+    def save_daily_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            connection.execute(
+                "delete from daily_pet_summaries where user_id = ? and pet_id = ?",
+                (user_id, pet_id),
+            )
+            for summary in summaries:
+                connection.execute(
+                    """
+                    insert into daily_pet_summaries (
+                        user_id, pet_id, date, summary_json
+                    ) values (?, ?, ?, ?)
+                    """,
+                    (user_id, pet_id, summary.date, self._to_json(summary.__dict__)),
+                )
+
+    def save_weekly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[WeeklyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            connection.execute(
+                "delete from weekly_pet_summaries where user_id = ? and pet_id = ?",
+                (user_id, pet_id),
+            )
+            for summary in summaries:
+                connection.execute(
+                    """
+                    insert into weekly_pet_summaries (
+                        user_id, pet_id, week_start, summary_json
+                    ) values (?, ?, ?, ?)
+                    """,
+                    (user_id, pet_id, summary.week_start, self._to_json(summary.__dict__)),
+                )
+
+    def save_monthly_summaries(
+        self, *, user_id: str, pet_id: str, summaries: list[MonthlyPetSummary]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            connection.execute(
+                "delete from monthly_pet_summaries where user_id = ? and pet_id = ?",
+                (user_id, pet_id),
+            )
+            for summary in summaries:
+                connection.execute(
+                    """
+                    insert into monthly_pet_summaries (
+                        user_id, pet_id, month, summary_json
+                    ) values (?, ?, ?, ?)
+                    """,
+                    (user_id, pet_id, summary.month, self._to_json(summary.__dict__)),
+                )
+
+    def get_daily_summaries(self, *, user_id: str, pet_id: str) -> list[DailyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select summary_json from daily_pet_summaries
+                where user_id = ? and pet_id = ?
+                order by date
+                """,
+                (user_id, pet_id),
+            ).fetchall()
+        return [DailyPetSummary(**json.loads(str(row["summary_json"]))) for row in rows]
+
+    def get_weekly_summaries(self, *, user_id: str, pet_id: str) -> list[WeeklyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select summary_json from weekly_pet_summaries
+                where user_id = ? and pet_id = ?
+                order by week_start
+                """,
+                (user_id, pet_id),
+            ).fetchall()
+        return [WeeklyPetSummary(**json.loads(str(row["summary_json"]))) for row in rows]
+
+    def get_monthly_summaries(self, *, user_id: str, pet_id: str) -> list[MonthlyPetSummary]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select summary_json from monthly_pet_summaries
+                where user_id = ? and pet_id = ?
+                order by month
+                """,
+                (user_id, pet_id),
+            ).fetchall()
+        return [MonthlyPetSummary(**json.loads(str(row["summary_json"]))) for row in rows]
+
+    def get_context_snapshot(self, *, user_id: str, pet_id: str) -> DogContextSnapshot:
+        pet = self.get_pet(user_id=user_id, pet_id=pet_id)
+        daily = self.get_daily_summaries(user_id=user_id, pet_id=pet_id)
+        weekly = self.get_weekly_summaries(user_id=user_id, pet_id=pet_id)
+        monthly = self.get_monthly_summaries(user_id=user_id, pet_id=pet_id)
+        active_issues = [issue for summary in daily[-3:] for issue in summary.active_issues]
+        recent_trends = [summary.summary for summary in weekly[-2:] or daily[-3:]]
+        flags = [
+            flag
+            for summary in [*monthly[-3:], *weekly[-4:], *daily[-7:]]
+            for flag in summary.important_flags
+        ]
+        return DogContextSnapshot(
+            user_id=user_id,
+            pet_id=pet_id,
+            pet_profile=pet.dog_profile.model_dump(),
+            health_baseline=pet.health_baseline.model_dump(),
+            behavioral_baseline=pet.behavioral_baseline.model_dump(),
+            active_issues=sorted(set(active_issues)),
+            recent_trends=recent_trends,
+            important_historical_flags=sorted(set(flags)),
+            recent_summary=" ".join(recent_trends[:3]),
+        )
+
     def _initialize_schema(self) -> None:
         with self._connect() as connection:
             connection.executescript(
@@ -175,6 +302,33 @@ class SQLitePetRepository:
                     user_id text not null,
                     pet_id text not null,
                     observation_json text not null,
+                    foreign key (user_id, pet_id) references pets(user_id, pet_id)
+                );
+
+                create table if not exists daily_pet_summaries (
+                    user_id text not null,
+                    pet_id text not null,
+                    date text not null,
+                    summary_json text not null,
+                    primary key (user_id, pet_id, date),
+                    foreign key (user_id, pet_id) references pets(user_id, pet_id)
+                );
+
+                create table if not exists weekly_pet_summaries (
+                    user_id text not null,
+                    pet_id text not null,
+                    week_start text not null,
+                    summary_json text not null,
+                    primary key (user_id, pet_id, week_start),
+                    foreign key (user_id, pet_id) references pets(user_id, pet_id)
+                );
+
+                create table if not exists monthly_pet_summaries (
+                    user_id text not null,
+                    pet_id text not null,
+                    month text not null,
+                    summary_json text not null,
+                    primary key (user_id, pet_id, month),
                     foreign key (user_id, pet_id) references pets(user_id, pet_id)
                 );
                 """

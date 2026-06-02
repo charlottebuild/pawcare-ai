@@ -9,6 +9,10 @@ from pawcare.services.case_models import (
     ProfessionalReferenceMatch,
 )
 from pawcare.services.knowledge_adapters import professional_reference_to_record
+from pawcare.services.knowledge_fts_index import (
+    SQLiteKnowledgeFTSIndex,
+    seed_professional_knowledge_documents,
+)
 from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
 from pawcare.services.pet_models import PetRecord
 from pawcare.skills.symptom_understanding import (
@@ -25,6 +29,7 @@ class ProfessionalReferenceService:
         *,
         references: list[ProfessionalCareReference] | None = None,
         knowledge_index: KnowledgeIndex | None = None,
+        fts_index: SQLiteKnowledgeFTSIndex | None = None,
     ) -> None:
         self.references = references or seed_professional_references()
         self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
@@ -33,6 +38,9 @@ class ProfessionalReferenceService:
                 for reference in self.references
             ]
         )
+        self.fts_index = fts_index or SQLiteKnowledgeFTSIndex()
+        if fts_index is None:
+            self.fts_index.ingest_documents(seed_professional_knowledge_documents())
 
     def find_matches(
         self,
@@ -60,12 +68,17 @@ class ProfessionalReferenceService:
             kinds={"professional"},
             limit=max(limit * 3, 10),
         )
+        fts_matches = self.fts_index.search(
+            query_text=query_text,
+            domains=None,
+            limit=max(limit * 2, 6),
+        )
         filtered = [
             self._to_match(match)
-            for match in matches
+            for match in [*matches, *fts_matches]
             if self._trigger_matches(raw_text=raw_text, match=match)
         ]
-        return filtered[:limit]
+        return self._dedupe(filtered)[:limit]
 
     def as_payload(
         self,
@@ -105,6 +118,18 @@ class ProfessionalReferenceService:
             vet_discussion_topics=list(record.discussion_topics),
             relevance_level=match.relevance_level,
         )
+
+    def _dedupe(
+        self, matches: list[ProfessionalReferenceMatch]
+    ) -> list[ProfessionalReferenceMatch]:
+        seen: set[str] = set()
+        deduped: list[ProfessionalReferenceMatch] = []
+        for match in matches:
+            if match.reference_id in seen:
+                continue
+            seen.add(match.reference_id)
+            deduped.append(match)
+        return deduped
 
 
 def seed_professional_references() -> list[ProfessionalCareReference]:

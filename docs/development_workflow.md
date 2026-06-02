@@ -91,6 +91,10 @@ After checks pass:
 | `api` | HTTP interface | FastAPI routes or request/response API changes |
 | `evaluation` | Automated scenario testing | 50+ scenario runner and metrics changes |
 
+The existing regression tests act as a lightweight golden set for core behavior.
+The formal JSON Golden Data Set is the drift check used when agent, prompt,
+retrieval, care-context, or safety behavior changes.
+
 ---
 
 ## 4. Safety Checklist
