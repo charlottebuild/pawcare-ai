@@ -1,9 +1,13 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from pawcare.api import create_app, create_local_app
+from pawcare.schemas.state import UserResponse
 from pawcare.services import (
     InMemoryPetRepository,
     PetRecord,
+    ResponsePolisher,
     SQLitePetRepository,
     UserAccount,
 )
@@ -59,6 +63,20 @@ def _create_user_and_two_pets(client: TestClient) -> None:
             json=_pet_payload(pet_id=pet_id, name=name),
         )
         assert response.status_code == 200
+
+
+def _sse_events(text: str) -> list[tuple[str, dict[str, object]]]:
+    events: list[tuple[str, dict[str, object]]] = []
+    for block in text.strip().split("\n\n"):
+        event = "message"
+        data = {}
+        for line in block.splitlines():
+            if line.startswith("event:"):
+                event = line.removeprefix("event:").strip()
+            if line.startswith("data:"):
+                data = json.loads(line.removeprefix("data:").strip())
+        events.append((event, data))
+    return events
 
 
 def test_health_endpoint_returns_ok() -> None:
@@ -320,6 +338,109 @@ def test_high_risk_message_returns_safe_user_response_only() -> None:
     assert "agent_outputs" not in body
     assert "proposed_update" not in body
     assert "safety_review" not in body
+
+
+def test_streaming_message_returns_status_events_and_final_response() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    with client.stream(
+        "POST",
+        "/v1/users/user_123/pets/dog_mochi/messages/stream",
+        json={
+            "raw_text": (
+                "Mochi pulls his head back when eating, drools, and has a small "
+                "lump under the tongue. Could it be salivary mucocele?"
+            ),
+            "timestamp": "2026-05-08T09:15:00-07:00",
+            "workflow_id": "wf_api_stream_001",
+        },
+    ) as response:
+        body = response.read().decode()
+
+    events = _sse_events(body)
+    event_names = [event for event, _ in events]
+    final_payload = events[-1][1]
+    final_response = final_payload["response"]
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert event_names == [
+        "status",
+        "status",
+        "status",
+        "status",
+        "status",
+        "final",
+    ]
+    assert [payload.get("stage") for _, payload in events[:-1]] == [
+        "received",
+        "loading_pet",
+        "processing_message",
+        "retrieving_care_context",
+        "safety_review",
+    ]
+    assert final_response["status"] == "attention_needed"
+    assert "GL_CONDITION_ORAL_NECK_001" in final_response["source_guideline_ids"]
+    assert final_payload["care_context"]["professional_references"]
+    assert final_payload["care_context"]["related_cases"]
+    assert "agent_outputs" not in final_response
+    assert "proposed_update" not in final_response
+    assert "safety_review" not in final_response
+
+
+def test_streaming_message_missing_pet_returns_generic_404_without_observations() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/not_mochi/messages/stream",
+        json={
+            "raw_text": "Mochi barely touched breakfast.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+        },
+    )
+
+    observations = client.get("/v1/users/user_123/pets/dog_mochi/observations")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Pet record is not available."
+    assert observations.json()["observations"] == []
+
+
+def test_message_endpoint_can_use_response_polisher_without_changing_contract() -> None:
+    class FakePolisher:
+        def polish(
+            self,
+            *,
+            response: UserResponse,
+            care_context: dict[str, object] | None = None,
+        ) -> UserResponse:
+            return response.model_copy(
+                update={"message": "Polished safe message."}
+            )
+
+    client = TestClient(
+        create_app(
+            repository=InMemoryPetRepository(),
+            response_polisher=FakePolisher(),
+        )
+    )
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi barely touched breakfast.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+        },
+    )
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["message"] == "Polished safe message."
+    assert body["status"] == "attention_needed"
+    assert "GL_APPETITE_002" in body["source_guideline_ids"]
 
 
 def test_related_cases_endpoint_returns_supporting_context_for_target_pet() -> None:

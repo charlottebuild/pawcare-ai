@@ -123,6 +123,41 @@ Interview summary:
 > over-trigger scary care cards. So the golden set protects both safety and
 > user experience.
 
+Evaluation observability:
+
+- Relevance is measured through semantic contracts: correct guideline IDs for
+  final responses and correct care-context domains for professional references
+  or similar cases.
+- Hallucination safety is measured as a guardrail pass rate for forbidden
+  diagnosis, medication, over-reassurance, or unsafe case-based claims. This is
+  not a full human-labeled hallucination-rate benchmark.
+- Latency is measured as end-to-end case duration in the golden runner. TTFT is
+  not measured until the product adds streaming responses.
+- Cost telemetry is optional. Local deterministic runs report unavailable usage;
+  OpenAI-backed summarization or screening can record provider usage when the
+  response includes token counts.
+- Streaming is status-event streaming, not raw medical token streaming. The
+  product may emit safe progress events before the final answer, but the final
+  user-facing response is sent only after the Coordinator and SafetyAgent have
+  finished.
+- LLM response polishing is optional and limited to wording. It can rewrite the
+  already structured `UserResponse.message`, but it cannot change status, risk
+  band, guideline IDs, or escalation conditions. Unsafe polish output falls back
+  to the deterministic response.
+
+Interview summary:
+
+> I evaluate AI behavior with both quality contracts and operational telemetry.
+> The Golden Dataset checks semantic contracts like risk triage, guideline
+> grounding, forbidden diagnostic language, retrieval relevance, and API
+> boundaries. Then the eval runner records latency and optional LLM usage, so I
+> can detect both behavioral regressions and cost or performance regressions
+> after prompt, retrieval, or agent changes. I am careful not to call this a
+> full human-labeled hallucination benchmark or true TTFT measurement until the
+> app has token-level streaming instrumentation. For now, PawCare streams safe
+> workflow status events and sends final medical guidance only after safety
+> review.
+
 ---
 
 ## 4. Safety Checklist

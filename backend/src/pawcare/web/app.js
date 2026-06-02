@@ -264,9 +264,24 @@ elements.messageForm.addEventListener("submit", async (event) => {
     return;
   }
   addChatMessage("user", rawText);
-  const response = await sendPetMessage(rawText);
-  elements.messageForm.reset();
-  await renderResponse(response, rawText);
+  const statusMessage = addChatMessage("assistant", "Received your update.", "working");
+  try {
+    const streamResult = await sendPetMessageStream(rawText, (event) => {
+      updateChatMessage(statusMessage, event.message || statusLabel(event.stage), "working");
+    });
+    elements.messageForm.reset();
+    await renderResponse(
+      streamResult.response,
+      rawText,
+      streamResult.care_context,
+      statusMessage,
+    );
+  } catch {
+    removeChatMessage(statusMessage);
+    const response = await sendPetMessage(rawText);
+    elements.messageForm.reset();
+    await renderResponse(response, rawText);
+  }
   await loadPets();
   await loadObservations();
 });
@@ -292,8 +307,22 @@ elements.observationForm.addEventListener("submit", async (event) => {
   }
   const rawText = `${details} Category: ${textValue(form, "category")}. Severity: ${textValue(form, "severity")}.`;
   addChatMessage("user", details);
-  const response = await sendPetMessage(rawText);
-  await renderResponse(response, rawText);
+  const statusMessage = addChatMessage("assistant", "Received your observation.", "working");
+  try {
+    const streamResult = await sendPetMessageStream(rawText, (event) => {
+      updateChatMessage(statusMessage, event.message || statusLabel(event.stage), "working");
+    });
+    await renderResponse(
+      streamResult.response,
+      rawText,
+      streamResult.care_context,
+      statusMessage,
+    );
+  } catch {
+    removeChatMessage(statusMessage);
+    const response = await sendPetMessage(rawText);
+    await renderResponse(response, rawText);
+  }
   elements.observationForm.reset();
   elements.duplicateWarning.hidden = true;
   state.pendingDuplicateMeal = "";
@@ -433,6 +462,50 @@ async function sendPetMessage(rawText) {
       },
     },
   );
+}
+
+async function sendPetMessageStream(rawText, onStatus) {
+  const response = await fetch(
+    `/v1/users/${encodeURIComponent(state.userId)}/pets/${encodeURIComponent(
+      state.selectedPetId,
+    )}/messages/stream`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        raw_text: rawText,
+        timestamp: new Date().toISOString(),
+      }),
+    },
+  );
+  if (!response.ok || !response.body) {
+    throw new Error("Streaming request failed.");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalPayload = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split("\n\n");
+    buffer = blocks.pop() || "";
+    blocks.forEach((block) => {
+      const event = parseSseBlock(block);
+      if (!event) return;
+      if (event.event === "status") {
+        onStatus?.(event.data || {});
+      }
+      if (event.event === "final") {
+        finalPayload = event.data;
+      }
+    });
+  }
+  if (!finalPayload?.response) {
+    throw new Error("Streaming response did not include a final message.");
+  }
+  return finalPayload;
 }
 
 async function fetchCareContext(rawText) {
@@ -598,7 +671,12 @@ function currentPet() {
   return state.pets.find((candidate) => candidate.pet_id === state.selectedPetId);
 }
 
-async function renderResponse(response, rawText = "") {
+async function renderResponse(
+  response,
+  rawText = "",
+  providedCareContext = null,
+  existingMessage = null,
+) {
   const meta = [
     response.risk_band ? `Risk: ${response.risk_band}` : "",
     response.source_guideline_ids?.length
@@ -608,14 +686,18 @@ async function renderResponse(response, rawText = "") {
       ? `Escalation: ${response.escalation_conditions.join("; ")}`
       : "",
   ].filter(Boolean);
-  const careContext = await fetchCareContext(rawText);
-  addChatMessage(
-    "assistant",
-    response.message,
-    response.status,
-    meta,
-    careContext,
-  );
+  const careContext = providedCareContext || await fetchCareContext(rawText);
+  if (existingMessage) {
+    updateChatMessage(
+      existingMessage,
+      response.message,
+      response.status,
+      meta,
+      careContext,
+    );
+    return;
+  }
+  addChatMessage("assistant", response.message, response.status, meta, careContext);
 }
 
 function renderChat() {
@@ -1043,6 +1125,30 @@ function addChatMessage(
   chat.push(chatMessage);
   appendChatBubble(chatMessage);
   elements.chatThread.scrollTop = elements.chatThread.scrollHeight;
+  return chatMessage;
+}
+
+function updateChatMessage(
+  chatMessage,
+  message,
+  status = chatMessage.status,
+  meta = chatMessage.meta || [],
+  careContext = chatMessage.careContext || null,
+) {
+  chatMessage.message = message;
+  chatMessage.status = status;
+  chatMessage.meta = meta;
+  chatMessage.careContext = careContext;
+  renderChat();
+}
+
+function removeChatMessage(chatMessage) {
+  const chat = messagesForCurrentPet();
+  const index = chat.indexOf(chatMessage);
+  if (index >= 0) {
+    chat.splice(index, 1);
+    renderChat();
+  }
 }
 
 function messagesForCurrentPet() {
@@ -1087,6 +1193,39 @@ function appendChatBubble({
     item.innerHTML = `<p>${escapeHtml(message)}</p>`;
   }
   elements.chatThread.append(item);
+}
+
+function parseSseBlock(block) {
+  const lines = String(block || "").split("\n");
+  let event = "message";
+  const dataLines = [];
+  lines.forEach((line) => {
+    if (line.startsWith("event:")) {
+      event = line.slice("event:".length).trim();
+    }
+    if (line.startsWith("data:")) {
+      dataLines.push(line.slice("data:".length).trim());
+    }
+  });
+  if (!dataLines.length) {
+    return null;
+  }
+  try {
+    return { event, data: JSON.parse(dataLines.join("\n")) };
+  } catch {
+    return null;
+  }
+}
+
+function statusLabel(stage) {
+  const labels = {
+    received: "Received your update.",
+    loading_pet: "Loading pet workspace.",
+    processing_message: "Checking health and behavior signals.",
+    retrieving_care_context: "Retrieving care context.",
+    safety_review: "Final safety review complete.",
+  };
+  return labels[stage] || "Working on this update.";
 }
 
 function renderCareContextMarkup(careContext = null) {

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,13 @@ from fastapi.testclient import TestClient
 
 from pawcare.api import create_app
 from pawcare.schemas.state import BehavioralBaseline, DogProfile, HealthBaseline
-from pawcare.services import InMemoryPetRepository, LogProcessingService, PetRecord, UserAccount
+from pawcare.services import (
+    InMemoryPetRepository,
+    LogProcessingService,
+    PetRecord,
+    UserAccount,
+    summarize_usage,
+)
 
 
 DEFAULT_CASES_PATH = Path(__file__).with_name("golden_cases.json")
@@ -31,6 +38,7 @@ class GoldenCaseResult:
     priority: str
     metrics: list[str]
     passed: bool
+    duration_ms: float = 0.0
     failures: list[str] = field(default_factory=list)
     metric_results: list[GoldenMetricResult] = field(default_factory=list)
     actual: dict[str, Any] = field(default_factory=dict)
@@ -81,11 +89,54 @@ class GoldenRunSummary:
             if not result.passed and result.priority == "high"
         ]
 
+    @property
+    def latency_summary(self) -> dict[str, int | float]:
+        durations = [result.duration_ms for result in self.results]
+        return {
+            "case_count": len(durations),
+            "total_ms": round(sum(durations), 3),
+            "avg_ms": round(sum(durations) / len(durations), 3) if durations else 0.0,
+            "p50_ms": self._percentile(durations, 0.50),
+            "p95_ms": self._percentile(durations, 0.95),
+            "max_ms": round(max(durations), 3) if durations else 0.0,
+            "ttft_ms": None,
+            "ttft_note": "Not measured in v1 because the API does not stream tokens yet.",
+        }
+
+    @property
+    def quality_summary(self) -> dict[str, object]:
+        metric_scores = self.metric_scores
+        guideline_score = metric_scores.get("guideline_grounding", {})
+        retrieval_score = metric_scores.get("care_context_retrieval", {})
+        safety_score = metric_scores.get("safety_forbidden_text", {})
+        return {
+            "behavioral_contract_pass_rate": self._pass_rate(
+                self.passed_count,
+                len(self.results),
+            ),
+            "retrieval_relevance_pass_rate": retrieval_score.get("pass_rate", 0.0),
+            "guideline_grounding_pass_rate": guideline_score.get("pass_rate", 0.0),
+            "hallucination_safety_pass_rate": safety_score.get("pass_rate", 0.0),
+            "hallucination_rate_note": (
+                "This is a guardrail pass rate, not a human-labeled hallucination rate."
+            ),
+        }
+
+    @property
+    def cost_summary(self) -> dict[str, object]:
+        return summarize_usage([])
+
     def report(self) -> str:
         lines = [
             f"Golden dataset: {self.passed_count}/{len(self.results)} passed "
             f"({self._pass_rate(self.passed_count, len(self.results)):.1%})"
         ]
+        latency = self.latency_summary
+        lines.append(
+            "Latency summary: "
+            f"p50={latency['p50_ms']}ms p95={latency['p95_ms']}ms "
+            f"avg={latency['avg_ms']}ms max={latency['max_ms']}ms"
+        )
         lines.append("Category scores:")
         for category, score in sorted(self.category_scores.items()):
             lines.append(
@@ -147,6 +198,9 @@ class GoldenRunSummary:
             },
             "category_scores": self.category_scores,
             "metric_scores": self.metric_scores,
+            "latency_summary": self.latency_summary,
+            "quality_summary": self.quality_summary,
+            "cost_summary": self.cost_summary,
             "case_results": [
                 {
                     "case_id": result.case_id,
@@ -154,6 +208,7 @@ class GoldenRunSummary:
                     "category": result.category,
                     "priority": result.priority,
                     "passed": result.passed,
+                    "duration_ms": result.duration_ms,
                     "failures": result.failures,
                     "metrics": [
                         {
@@ -185,6 +240,16 @@ class GoldenRunSummary:
     def _pass_rate(self, passed: int, total: int) -> float:
         return round(passed / total, 4) if total else 0.0
 
+    def _percentile(self, values: list[float], percentile: float) -> float:
+        if not values:
+            return 0.0
+        sorted_values = sorted(values)
+        index = min(
+            len(sorted_values) - 1,
+            max(0, round((len(sorted_values) - 1) * percentile)),
+        )
+        return round(sorted_values[index], 3)
+
 
 def load_cases(path: str | Path = DEFAULT_CASES_PATH) -> list[dict[str, Any]]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
@@ -209,11 +274,13 @@ def run_case(case: dict[str, Any]) -> GoldenCaseResult:
     category = str(case.get("category") or "uncategorized")
     priority = str(case.get("priority") or "medium")
     metrics = list(case.get("metrics") or _default_metrics(case.get("expected", {})))
+    start = time.perf_counter()
     if target_layer == "service":
         actual = _run_service_case(case)
     elif target_layer == "api":
         actual = _run_api_case(case)
     else:
+        duration_ms = round((time.perf_counter() - start) * 1000, 3)
         return GoldenCaseResult(
             case_id=str(case.get("case_id", "unknown")),
             target_layer=target_layer,
@@ -221,6 +288,7 @@ def run_case(case: dict[str, Any]) -> GoldenCaseResult:
             priority=priority,
             metrics=metrics,
             passed=False,
+            duration_ms=duration_ms,
             failures=[f"Unsupported target_layer: {target_layer}"],
             metric_results=[
                 GoldenMetricResult(
@@ -235,6 +303,7 @@ def run_case(case: dict[str, Any]) -> GoldenCaseResult:
         expected=case.get("expected", {}),
         metrics=metrics,
     )
+    duration_ms = round((time.perf_counter() - start) * 1000, 3)
     metric_results = [
         GoldenMetricResult(
             metric=metric,
@@ -255,6 +324,7 @@ def run_case(case: dict[str, Any]) -> GoldenCaseResult:
         priority=priority,
         metrics=metrics,
         passed=not failures,
+        duration_ms=duration_ms,
         failures=failures,
         metric_results=metric_results,
         actual=actual,
