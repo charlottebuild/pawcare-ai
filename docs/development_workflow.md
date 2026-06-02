@@ -95,6 +95,34 @@ The existing regression tests act as a lightweight golden set for core behavior.
 The formal JSON Golden Data Set is the drift check used when agent, prompt,
 retrieval, care-context, or safety behavior changes.
 
+The Golden Data Set is contract-based rather than word-for-word. Each scenario
+stores a realistic user message, pet profile, target layer, category, priority,
+metrics, and expected safety/product contract. The runner checks risk
+classification, guideline grounding, forbidden diagnostic or medication wording,
+care-context retrieval, and API privacy boundaries. This lets the project
+measure drift without making every response sentence brittle.
+
+Interview summary:
+
+> I built a contract-based Golden Dataset for PawCare instead of relying on
+> manual testing. Each case contains a realistic user message, pet profile,
+> target layer, and expected safety contract. I do not require exact wording
+> because AI responses can change, but I check the important guarantees: risk
+> level, guideline grounding, forbidden diagnostic language, care-context
+> retrieval, and API privacy boundaries.
+>
+> The dataset is grouped by category, such as health triage, condition triage,
+> behavior safety, normal updates, and care-context retrieval. The runner
+> replays cases through both the core service layer and the FastAPI product
+> layer, then reports pass rates by category and metric. This lets me detect
+> drift when I change agents, retrieval, prompts, or symptom parsing.
+>
+> For example, cases like "cat didn't pee all day," "poo blood," "eye injury,"
+> or "could it be salivary mucocele" must trigger the right urgency and
+> references, while normal updates like "ate breakfast normally" must not
+> over-trigger scary care cards. So the golden set protects both safety and
+> user experience.
+
 ---
 
 ## 4. Safety Checklist

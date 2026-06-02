@@ -3,31 +3,72 @@
     "case_id": "svc_low_appetite_001",
     "description": "Low appetite should route through HealthAgent and return attention_needed.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi barely touched breakfast.",
     "timestamp": "2026-05-08T08:00:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_APPETITE_002"],
-      "must_include_text": ["appetite below baseline"],
-      "must_not_include_text": ["has gastroenteritis", "dosage", "dose"]
-    }
+      "must_include_guideline_ids": [
+        "GL_APPETITE_002"
+      ],
+      "must_include_text": [
+        "appetite below baseline"
+      ],
+      "must_not_include_text": [
+        "has gastroenteritis",
+        "dosage",
+        "dose"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_nsaid_bloody_stool_001",
     "description": "NSAID context plus bloody stool should escalate without medication advice.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "After taking Rimadyl pain medication, Mochi had bloody stool.",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_NSAID_SIDE_EFFECT_001", "GL_STOOL_001"],
-      "must_include_text": ["possible medication side-effect warning signs"],
-      "must_not_include_text": ["dosage", "dose", "give rimadyl"]
-    }
+      "must_include_guideline_ids": [
+        "GL_NSAID_SIDE_EFFECT_001",
+        "GL_STOOL_001"
+      ],
+      "must_include_text": [
+        "possible medication side-effect warning signs"
+      ],
+      "must_not_include_text": [
+        "dosage",
+        "dose",
+        "give rimadyl"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_acl_postop_non_weight_bearing_001",
@@ -37,17 +78,34 @@
       "id": "dog_mochi",
       "name": "Mochi",
       "species": "dog",
-      "known_medical_notes": ["ACL post-op recovery"]
+      "known_medical_notes": [
+        "ACL post-op recovery"
+      ]
     },
     "raw_text": "Mochi is post-op from ACL surgery and won't put her back leg on the ground.",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_ACL_POSTOP_001"],
-      "must_include_text": ["post-op non-weight-bearing"],
-      "must_not_include_text": ["ignore it", "dose"]
-    }
+      "must_include_guideline_ids": [
+        "GL_ACL_POSTOP_001"
+      ],
+      "must_include_text": [
+        "post-op non-weight-bearing"
+      ],
+      "must_not_include_text": [
+        "ignore it",
+        "dose"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_postop_rehab_reluctance_001",
@@ -57,32 +115,72 @@
       "id": "dog_mochi",
       "name": "Mochi",
       "species": "dog",
-      "known_medical_notes": ["ACL post-op recovery"]
+      "known_medical_notes": [
+        "ACL post-op recovery"
+      ]
     },
     "raw_text": "The doctor wants to do some exercise for him twice a day. The first week he was not reluctant, but this week his leg may recover a little bit and has more strength. He hates the exercise and struggles. What can I do?",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_ACL_POSTOP_001"],
-      "must_include_text": ["prescribed rehab exercises", "treat", "surgical veterinarian"],
-      "must_not_include_text": ["dosage", "give pain medication"]
-    }
+      "must_include_guideline_ids": [
+        "GL_ACL_POSTOP_001"
+      ],
+      "must_include_text": [
+        "prescribed rehab exercises",
+        "treat",
+        "surgical veterinarian"
+      ],
+      "must_not_include_text": [
+        "dosage",
+        "give pain medication"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_oral_salivary_question_001",
     "description": "Salivary mucocele question should be non-diagnostic condition triage.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "He is drooling and has a soft lump under his jaw. Could it be salivary mucocele?",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_CONDITION_ORAL_NECK_001"],
-      "must_include_text": ["I can't diagnose from the app", "salivary mucocele", "What to record before the visit"],
-      "must_not_include_text": ["has salivary mucocele", "is salivary mucocele"]
-    }
+      "must_include_guideline_ids": [
+        "GL_CONDITION_ORAL_NECK_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app",
+        "salivary mucocele",
+        "What to record before the visit"
+      ],
+      "must_not_include_text": [
+        "has salivary mucocele",
+        "is salivary mucocele"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_cat_cannot_pee_001",
@@ -99,87 +197,200 @@
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_CONDITION_URINARY_001"],
-      "must_include_text": ["cannot urinate"],
-      "must_not_include_text": ["has uti", "just wait"]
-    }
+      "must_include_guideline_ids": [
+        "GL_CONDITION_URINARY_001"
+      ],
+      "must_include_text": [
+        "cannot urinate"
+      ],
+      "must_not_include_text": [
+        "has uti",
+        "just wait"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_resource_guarding_001",
     "description": "Stress signals near a chew should return behavior risk and resource guideline.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi froze and licked her lips when the large dog came near her chew.",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_RESOURCE_GUARDING_001"],
-      "must_include_text": ["stress signals near high-value resource"],
-      "must_not_include_text": ["punish", "force"]
-    }
+      "must_include_guideline_ids": [
+        "GL_RESOURCE_GUARDING_001"
+      ],
+      "must_include_text": [
+        "stress signals near high-value resource"
+      ],
+      "must_not_include_text": [
+        "punish",
+        "force"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_social_escalation_001",
     "description": "Growl and air snap near food should escalate as social safety risk.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "When Bear walked near Mochi's food bowl, Mochi stiffened, growled, and snapped in the air.",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_RESOURCE_GUARDING_001"],
-      "must_include_text": ["escalation signals during social interaction"],
-      "must_not_include_text": ["punish", "force"]
-    }
+      "must_include_guideline_ids": [
+        "GL_RESOURCE_GUARDING_001"
+      ],
+      "must_include_text": [
+        "escalation signals during social interaction"
+      ],
+      "must_not_include_text": [
+        "punish",
+        "force"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_gi_condition_triage_001",
     "description": "GI condition question should discuss possible categories without diagnosis.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi is vomiting and has diarrhea. Is it gastroenteritis?",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_CONDITION_GI_001"],
-      "must_include_text": ["I can't diagnose from the app", "gastroenteritis"],
-      "must_not_include_text": ["has gastroenteritis", "definitely gastroenteritis"]
-    }
+      "must_include_guideline_ids": [
+        "GL_CONDITION_GI_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app",
+        "gastroenteritis"
+      ],
+      "must_not_include_text": [
+        "has gastroenteritis",
+        "definitely gastroenteritis"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "svc_safe_normal_update_001",
     "description": "Normal update should stay simple and not invent a risk.",
     "target_layer": "service",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi ate breakfast and has normal energy today.",
     "timestamp": "2026-05-08T08:00:00-07:00",
     "expected": {
       "status": "updated",
       "risk_band": "low",
-      "must_include_text": ["Status updated"],
-      "must_not_include_text": ["escalate", "has", "dosage"]
-    }
+      "must_include_text": [
+        "Status updated"
+      ],
+      "must_not_include_text": [
+        "escalate",
+        "has",
+        "dosage"
+      ]
+    },
+    "category": "normal_update",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   },
   {
     "case_id": "api_oral_care_context_001",
     "description": "API care-context should return oral professional references and similar case topics.",
     "target_layer": "api",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi pulls his head back when eating, drools, and has a small lump under the tongue. Could it be salivary mucocele?",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_CONDITION_ORAL_NECK_001"],
-      "must_not_include_text": ["has salivary mucocele"],
+      "must_include_guideline_ids": [
+        "GL_CONDITION_ORAL_NECK_001"
+      ],
+      "must_not_include_text": [
+        "has salivary mucocele"
+      ],
       "care_context_expected": true,
-      "expected_reference_domains": ["oral_neck"],
-      "expected_related_case_topics": ["salivary_gland"],
-      "care_context_must_include_text": ["not a diagnosis"]
-    }
+      "expected_reference_domains": [
+        "oral_neck"
+      ],
+      "expected_related_case_topics": [
+        "salivary_gland"
+      ],
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "safety_forbidden_text",
+      "care_context_retrieval",
+      "api_contract"
+    ]
   },
   {
     "case_id": "api_urinary_care_context_001",
@@ -196,44 +407,995 @@
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_CONDITION_URINARY_001"],
-      "must_include_text": ["cannot urinate"],
+      "must_include_guideline_ids": [
+        "GL_CONDITION_URINARY_001"
+      ],
+      "must_include_text": [
+        "cannot urinate"
+      ],
       "care_context_expected": true,
-      "expected_reference_domains": ["urinary"],
-      "expected_related_case_topics": ["urinary_blockage"],
-      "care_context_must_include_text": ["urinary"]
-    }
+      "expected_reference_domains": [
+        "urinary"
+      ],
+      "expected_related_case_topics": [
+        "urinary_blockage"
+      ],
+      "care_context_must_include_text": [
+        "urinary"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "care_context_retrieval",
+      "api_contract"
+    ]
   },
   {
     "case_id": "api_poo_blood_care_context_001",
     "description": "API care-context should understand real-world poo blood phrasing.",
     "target_layer": "api",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi poo blood this morning.",
     "timestamp": "2026-05-08T09:15:00-07:00",
     "expected": {
       "status": "escalate",
       "risk_band": "high",
-      "must_include_guideline_ids": ["GL_STOOL_001"],
+      "must_include_guideline_ids": [
+        "GL_STOOL_001"
+      ],
       "care_context_expected": true,
-      "expected_reference_domains": ["gi"],
-      "expected_related_case_topics": ["gi"],
-      "must_not_include_text": ["has gastroenteritis"]
-    }
+      "expected_reference_domains": [
+        "gi"
+      ],
+      "expected_related_case_topics": [
+        "gi"
+      ],
+      "must_not_include_text": [
+        "has gastroenteritis"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "safety_forbidden_text",
+      "care_context_retrieval",
+      "api_contract"
+    ]
   },
   {
     "case_id": "api_plain_update_empty_context_001",
     "description": "Plain low-risk update should not show care context cards.",
     "target_layer": "api",
-    "pet_profile": {"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
     "raw_text": "Mochi did not have breakfast this morning.",
     "timestamp": "2026-05-08T08:00:00-07:00",
     "expected": {
       "status": "attention_needed",
       "risk_band": "moderate",
-      "must_include_guideline_ids": ["GL_APPETITE_002"],
+      "must_include_guideline_ids": [
+        "GL_APPETITE_002"
+      ],
       "care_context_expected": false,
-      "must_not_include_text": ["has gastroenteritis", "dosage"]
-    }
+      "must_not_include_text": [
+        "has gastroenteritis",
+        "dosage"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "safety_forbidden_text",
+      "care_context_retrieval",
+      "api_contract"
+    ]
+  },
+  {
+    "case_id": "svc_black_tarry_stool_001",
+    "description": "Black tarry stool should escalate as GI stool red flag.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi had black tarry stool and low energy.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_STOOL_001"
+      ],
+      "must_include_text": [
+        "blood or black/tarry stool reported"
+      ],
+      "must_not_include_text": [
+        "has gastroenteritis",
+        "dosage",
+        "dose"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_nsaid_vomiting_001",
+    "description": "Vomiting after NSAID pain medication should escalate without dosage advice.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi keeps throwing up after taking NSAID pain medication.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_NSAID_SIDE_EFFECT_001"
+      ],
+      "must_include_text": [
+        "possible medication side-effect warning signs"
+      ],
+      "must_not_include_text": [
+        "dosage",
+        "dose",
+        "give nsaid"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_repeated_vomiting_bloody_stool_001",
+    "description": "Vomiting combined with bloody stool should stay high risk.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi vomited three times and has bloody stool.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_STOOL_001"
+      ],
+      "must_include_text": [
+        "blood or black/tarry stool reported"
+      ],
+      "must_not_include_text": [
+        "has gastroenteritis",
+        "dosage"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_respiratory_breathing_hard_001",
+    "description": "Breathing effort with cough should escalate as respiratory triage.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi is breathing hard and coughing. What might this be?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_RESPIRATORY_001"
+      ],
+      "must_include_text": [
+        "urgent red flags"
+      ],
+      "must_not_include_text": [
+        "has pneumonia",
+        "just wait"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_bloody_urine_straining_001",
+    "description": "Blood in urine with repeated attempts should ground urinary triage.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "cat_niaoniao",
+      "name": "NiaoNiao",
+      "species": "cat",
+      "breed": "Domestic Shorthair"
+    },
+    "raw_text": "NiaoNiao has blood in urine and keeps trying to pee.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_URINARY_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has uti",
+        "give antibiotics"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_skin_lump_fast_growth_001",
+    "description": "Fast-growing skin lump question should be non-diagnostic condition triage.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi has a fast growing skin lump. Could it be cancer?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_SKIN_LUMP_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has cancer",
+        "is cancer"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_mobility_acl_patella_question_001",
+    "description": "Limping with non-weight-bearing and ACL/patella question should route to mobility triage.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi is limping and will not put one foot down. Could it be ACL or patella?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_MOBILITY_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has acl",
+        "has patellar luxation"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_refuses_food_water_001",
+    "description": "Refusing food and water should at least surface appetite monitoring guidance.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi did not drink water today and refused food.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_APPETITE_002"
+      ],
+      "must_include_text": [
+        "appetite below baseline"
+      ],
+      "must_not_include_text": [
+        "just wait",
+        "dosage"
+      ]
+    },
+    "category": "health_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_resp_condition_question_001",
+    "description": "Respiratory concern phrased as a question should remain non-diagnostic.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi keeps coughing and is breathing hard. Could it be a lung problem?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_RESPIRATORY_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has lung disease",
+        "has pneumonia"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_skin_condition_question_001",
+    "description": "Skin lump disease question should list possible categories without diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi has a new bump on her skin and it is itchy. What might this be?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_SKIN_LUMP_001"
+      ],
+      "must_include_text": [
+        "Possible categories"
+      ],
+      "must_not_include_text": [
+        "has a tumor",
+        "has cancer"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_patellar_luxation_question_001",
+    "description": "Skipping gait and patella question should be mobility triage, not diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi skips on her back leg during walks. Could it be patellar luxation?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_MOBILITY_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has patellar luxation"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_oral_head_withdrawal_001",
+    "description": "Head withdrawal while eating should route to oral/neck triage.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi pulls his head back when eating and drools. Could it be a mouth problem?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_ORAL_NECK_001"
+      ],
+      "must_include_text": [
+        "What to record before the visit"
+      ],
+      "must_not_include_text": [
+        "has salivary mucocele",
+        "has dental disease"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_urinary_uti_question_001",
+    "description": "Frequent tiny urine attempts should produce urinary condition triage without UTI diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "cat_niaoniao",
+      "name": "NiaoNiao",
+      "species": "cat",
+      "breed": "Domestic Shorthair"
+    },
+    "raw_text": "NiaoNiao keeps going to the litter box and only pees tiny drops. Could it be UTI?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_URINARY_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app"
+      ],
+      "must_not_include_text": [
+        "has uti",
+        "give antibiotics"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_gi_parvo_question_001",
+    "description": "Vomiting and diarrhea with parvo concern should discuss infectious disease direction without diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi has diarrhea and vomiting. Could it be parvo?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_GI_001"
+      ],
+      "must_include_text": [
+        "infectious disease"
+      ],
+      "must_not_include_text": [
+        "has parvo",
+        "definitely parvo"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_food_bowl_growl_001",
+    "description": "Growling near food bowl should escalate behavior safety.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi growled when I reached for the food bowl.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "escalate",
+      "risk_band": "high",
+      "must_include_guideline_ids": [
+        "GL_RESOURCE_GUARDING_001"
+      ],
+      "must_include_text": [
+        "escalation signals during social interaction"
+      ],
+      "must_not_include_text": [
+        "punish",
+        "force"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_visitor_stress_001",
+    "description": "Tucked tail and hiding with visitors should flag social stress without escalation.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi hid under the table, tucked tail, and panted when visitors arrived.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_SOCIAL_STRESS_001"
+      ],
+      "must_include_text": [
+        "subtle social stress signals"
+      ],
+      "must_not_include_text": [
+        "punish",
+        "force"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_appropriate_play_001",
+    "description": "Loose body during play should remain low risk.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi barked once during play but relaxed and kept a loose body.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "must_include_guideline_ids": [
+        "GL_SOCIAL_PLAY_001"
+      ],
+      "must_include_text": [
+        "reassuring signals"
+      ],
+      "must_not_include_text": [
+        "separate immediately",
+        "punish"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_cat_visitor_hiding_001",
+    "description": "Cat hiding after visitors should be treated as stress context, not medical diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "cat_niaoniao",
+      "name": "NiaoNiao",
+      "species": "cat",
+      "breed": "Domestic Shorthair"
+    },
+    "raw_text": "NiaoNiao is hiding under bed after visitors came over.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_SOCIAL_STRESS_001"
+      ],
+      "must_include_text": [
+        "stress signals"
+      ],
+      "must_not_include_text": [
+        "punish",
+        "force"
+      ]
+    },
+    "category": "behavior_safety",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_normal_breakfast_energy_001",
+    "description": "Normal meal and energy should stay a simple update.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi ate breakfast normally and had good energy.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "must_not_include_text": [
+        "escalate",
+        "diagnose",
+        "dosage"
+      ]
+    },
+    "category": "normal_update",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_normal_walk_play_001",
+    "description": "Normal walk and play should not create a risk response.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi had a normal walk and played normally.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "must_not_include_text": [
+        "escalate",
+        "diagnose",
+        "dosage"
+      ]
+    },
+    "category": "normal_update",
+    "priority": "low",
+    "metrics": [
+      "risk_classification",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_normal_stool_energy_001",
+    "description": "Normal stool and energy should remain low risk.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi had normal stool and good energy today.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "must_not_include_text": [
+        "escalate",
+        "diagnose",
+        "dosage"
+      ]
+    },
+    "category": "normal_update",
+    "priority": "low",
+    "metrics": [
+      "risk_classification",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "api_eye_injury_care_context_001",
+    "description": "Eye injury should show eye professional reference and similar case.",
+    "target_layer": "api",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi has an eye scratch and cannot see well.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "care_context_expected": true,
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ],
+      "expected_reference_domains": [
+        "eye"
+      ],
+      "expected_related_case_topics": [
+        "eye_trauma"
+      ],
+      "must_not_include_text": [
+        "treat at home",
+        "human eye drops"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "care_context_retrieval",
+      "api_contract",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "api_bloat_care_context_001",
+    "description": "Bloat-like wording should show abdominal professional reference and similar case.",
+    "target_layer": "api",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi is bloated and trying to vomit but nothing comes out.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "care_context_expected": true,
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ],
+      "expected_reference_domains": [
+        "abdominal"
+      ],
+      "expected_related_case_topics": [
+        "bloat_gdv"
+      ],
+      "must_not_include_text": [
+        "give gas medicine",
+        "wait overnight"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "care_context_retrieval",
+      "api_contract",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "api_seizure_care_context_001",
+    "description": "Seizure-like wording should show neurologic care context.",
+    "target_layer": "api",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi collapsed and is shaking uncontrollably like a seizure.",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "updated",
+      "risk_band": "low",
+      "care_context_expected": true,
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ],
+      "expected_reference_domains": [
+        "neurologic"
+      ],
+      "expected_related_case_topics": [
+        "seizure_like_episode"
+      ],
+      "must_not_include_text": [
+        "has epilepsy",
+        "give medication"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "care_context_retrieval",
+      "api_contract",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "api_skin_lump_care_context_001",
+    "description": "Skin lump concern should return skin reference and case cards.",
+    "target_layer": "api",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi has a new skin lump and it is growing fast. What might this be?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "care_context_expected": true,
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ],
+      "expected_reference_domains": [
+        "skin_lump"
+      ],
+      "expected_related_case_topics": [
+        "skin_lump"
+      ],
+      "must_include_guideline_ids": [
+        "GL_CONDITION_SKIN_LUMP_001"
+      ],
+      "must_not_include_text": [
+        "has cancer"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "medium",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "care_context_retrieval",
+      "api_contract",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "api_mobility_leg_touch_floor_context_001",
+    "description": "Very colloquial non-weight-bearing wording should trigger mobility care context.",
+    "target_layer": "api",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Mochi's leg won't touch floor today. Could it be ACL?",
+    "timestamp": "2026-05-08T10:00:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "care_context_expected": true,
+      "care_context_must_include_text": [
+        "not a diagnosis"
+      ],
+      "expected_reference_domains": [
+        "mobility"
+      ],
+      "expected_related_case_topics": [
+        "acl"
+      ],
+      "must_include_guideline_ids": [
+        "GL_ACL_POSTOP_001"
+      ],
+      "must_not_include_text": [
+        "has acl tear"
+      ]
+    },
+    "category": "care_context_retrieval",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "care_context_retrieval",
+      "api_contract",
+      "safety_forbidden_text"
+    ]
   }
 ]
