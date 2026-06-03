@@ -180,6 +180,25 @@ Interview summary:
 > Coordinator/Safety workflow. This gives the project MCP-style extensibility
 > while preserving deterministic safety boundaries.
 
+Long-term memory maintenance:
+
+- `python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3` rebuilds
+  daily, weekly, and monthly pet summaries from SQLite observations.
+- The command supports full database rebuilds, per-user rebuilds, per-pet
+  rebuilds, and dry runs.
+- It is intentionally offline/manual in v1. Future cron jobs, FastAPI
+  background tasks, or production queues should reuse the same rebuild function
+  rather than duplicating summary logic.
+
+Interview summary:
+
+> PawCare has the summary worker logic implemented as an offline rebuild
+> command. I chose this before adding a production scheduler because the current
+> app is SQLite-backed and local-first. The important part is that raw
+> observations can be compressed into daily, weekly, and monthly pet memory
+> summaries; production scheduling is a deployment concern that can be added
+> later with cron or a queue once the infrastructure exists.
+
 ---
 
 ## 4. Safety Checklist

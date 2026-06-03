@@ -44,6 +44,13 @@ class SQLitePetRepository:
             )
         return user
 
+    def list_user_ids(self) -> list[str]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                "select user_id from users order by user_id"
+            ).fetchall()
+        return [str(row["user_id"]) for row in rows]
+
     def create_pet(self, pet: PetRecord) -> PetRecord:
         with self._connect() as connection:
             user_exists = connection.execute(
