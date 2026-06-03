@@ -158,6 +158,28 @@ Interview summary:
 > workflow status events and sends final medical guidance only after safety
 > review.
 
+MCP sidecar:
+
+- `pawcare.mcp_server` exposes PawCare capabilities as local MCP tools for
+  external AI clients and coding agents.
+- The MCP layer is read-only in v1. It can screen abnormal signals, retrieve
+  care context, preview a safe response, and run the Golden Dataset.
+- MCP tools must not append observations, mutate pet profiles, write SQLite
+  state, crawl third-party platforms, or expose internal `agent_outputs`,
+  `proposed_update`, or `safety_review` payloads.
+- Product traffic still flows through FastAPI and `PetMessageService`; MCP is a
+  structured tool interface beside the product API, not a replacement.
+
+Interview summary:
+
+> I added a local MCP sidecar so PawCare's stable safety and retrieval
+> capabilities can be called by external AI clients as structured tools. The
+> tools are intentionally read-only: they can screen abnormal signals, retrieve
+> non-diagnostic care context, preview the safe response chain, and run the
+> Golden Dataset, but they cannot mutate user pet records or bypass the
+> Coordinator/Safety workflow. This gives the project MCP-style extensibility
+> while preserving deterministic safety boundaries.
+
 ---
 
 ## 4. Safety Checklist
