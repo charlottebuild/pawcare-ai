@@ -93,3 +93,37 @@ def test_semantic_cache_hits_and_evicts_oldest_entry() -> None:
     assert len(cache) == 1
     assert not cache.get(raw_text="Mochi poo blood.", pet=pet, limit=3).hit
     assert cache.get(raw_text="Mochi cannot pee.", pet=pet, limit=3).hit
+    assert cache.metrics()["evictions"] == 1
+
+
+def test_semantic_cache_metrics_and_reset() -> None:
+    cache = SemanticCareContextCache()
+    pet = _pet()
+    key = cache.make_key(raw_text="Mochi poo blood.", pet=pet, limit=3)
+
+    assert not cache.get(raw_text="Mochi poo blood.", pet=pet, limit=3).hit
+    cache.set(
+        key=key,
+        payload={
+            "professional_references": [{"domain": "gi"}],
+            "related_cases": [],
+            "context_summary": "GI context.",
+            "non_diagnostic_notice": "Not a diagnosis.",
+        },
+    )
+    assert cache.get(raw_text="Mochi had bloody stool.", pet=pet, limit=3).hit
+
+    metrics = cache.metrics()
+    assert metrics["hits"] == 1
+    assert metrics["misses"] == 1
+    assert metrics["sets"] == 1
+    assert metrics["entries"] == 1
+    assert metrics["hit_rate"] == 0.5
+
+    cache.reset_metrics()
+
+    reset = cache.metrics()
+    assert reset["hits"] == 0
+    assert reset["misses"] == 0
+    assert reset["sets"] == 0
+    assert reset["entries"] == 1

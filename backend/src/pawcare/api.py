@@ -120,7 +120,9 @@ def create_app(
     reference_service = professional_reference_service or ProfessionalReferenceService()
     summarizer = knowledge_summarizer or build_knowledge_summarizer()
     polisher = response_polisher or build_response_polisher()
-    semantic_cache = care_context_cache or SemanticCareContextCache()
+    semantic_cache = (
+        care_context_cache if care_context_cache is not None else SemanticCareContextCache()
+    )
     app = FastAPI(title="PawCare AI API", version="0.1.0")
     _mount_web_app(app)
 

@@ -103,6 +103,14 @@ This offline command rebuilds daily, weekly, and monthly summaries from stored o
 
 Care-context retrieval uses a lightweight in-memory semantic cache. The cache reuses non-diagnostic professional references, similar cases, and context summaries for semantically similar symptom queries. It does not cache final `UserResponse` status, risk band, guideline IDs, or escalation conditions.
 
+Run the local semantic-cache cost benchmark:
+
+```bash
+python -m pawcare.evaluation.cost_benchmark --report-json /tmp/pawcare_cost_benchmark.json
+```
+
+The benchmark reports cache hit rate, avoided retrieval/summarizer work, estimated context tokens saved, and latency. The token savings are deterministic estimates for engineering comparison, not production billing.
+
 ---
 
 ## Vibe Coding Rule

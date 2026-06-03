@@ -48,6 +48,10 @@ class SemanticCareContextCache:
         if max_entries < 1:
             raise ValueError("max_entries must be at least 1")
         self.max_entries = max_entries
+        self.hits = 0
+        self.misses = 0
+        self.sets = 0
+        self.evictions = 0
         self._entries: OrderedDict[
             SemanticCareContextCacheKey,
             dict[str, object],
@@ -86,7 +90,9 @@ class SemanticCareContextCache:
     ) -> SemanticCareContextCacheLookup:
         key = self.make_key(raw_text=raw_text, pet=pet, limit=limit)
         if key is None or key not in self._entries:
+            self.misses += 1
             return SemanticCareContextCacheLookup(key=key, payload=None)
+        self.hits += 1
         payload = self._entries.pop(key)
         self._entries[key] = payload
         cached_payload = dict(payload)
@@ -96,6 +102,7 @@ class SemanticCareContextCache:
     def set(self, *, key: SemanticCareContextCacheKey | None, payload: dict[str, object]) -> None:
         if key is None or not self._cacheable(payload):
             return
+        self.sets += 1
         stored_payload = {
             name: value
             for name, value in payload.items()
@@ -105,6 +112,24 @@ class SemanticCareContextCache:
         self._entries.move_to_end(key)
         while len(self._entries) > self.max_entries:
             self._entries.popitem(last=False)
+            self.evictions += 1
+
+    def metrics(self) -> dict[str, int | float]:
+        lookups = self.hits + self.misses
+        return {
+            "hits": self.hits,
+            "misses": self.misses,
+            "sets": self.sets,
+            "evictions": self.evictions,
+            "entries": len(self),
+            "hit_rate": round(self.hits / lookups, 4) if lookups else 0.0,
+        }
+
+    def reset_metrics(self) -> None:
+        self.hits = 0
+        self.misses = 0
+        self.sets = 0
+        self.evictions = 0
 
     def __len__(self) -> int:
         return len(self._entries)

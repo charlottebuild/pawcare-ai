@@ -221,6 +221,24 @@ Interview summary:
 > through the current pet state, Coordinator, and SafetyAgent, so cached context
 > cannot replace triage or escalation logic.
 
+Cost benchmark:
+
+- `python -m pawcare.evaluation.cost_benchmark` runs a local semantic-cache
+  benchmark over repeated care-context scenarios.
+- The report includes cache hit rate, avoided retrieval calls, avoided
+  summarizer calls, estimated context tokens saved, and latency.
+- Token savings are deterministic estimates for comparison, not OpenAI billing
+  data.
+
+Interview summary:
+
+> I do not just assume semantic caching saves money. I benchmark it. The local
+> cost runner replays repeated symptom questions, measures cache hits and
+> misses, estimates avoided retrieval/summarization payload tokens, and reports
+> latency. This lets me discuss cost optimization with concrete engineering
+> telemetry while being honest that v1 estimates context-token savings rather
+> than real provider billing.
+
 ---
 
 ## 4. Safety Checklist
