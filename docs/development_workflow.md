@@ -123,6 +123,82 @@ Interview summary:
 > over-trigger scary care cards. So the golden set protects both safety and
 > user experience.
 
+Evaluation observability:
+
+- Relevance is measured through semantic contracts: correct guideline IDs for
+  final responses and correct care-context domains for professional references
+  or similar cases.
+- Hallucination safety is measured as a guardrail pass rate for forbidden
+  diagnosis, medication, over-reassurance, or unsafe case-based claims. This is
+  not a full human-labeled hallucination-rate benchmark.
+- Latency is measured as end-to-end case duration in the golden runner. TTFT is
+  not measured until the product adds streaming responses.
+- Cost telemetry is optional. Local deterministic runs report unavailable usage;
+  OpenAI-backed summarization or screening can record provider usage when the
+  response includes token counts.
+- Streaming is status-event streaming, not raw medical token streaming. The
+  product may emit safe progress events before the final answer, but the final
+  user-facing response is sent only after the Coordinator and SafetyAgent have
+  finished.
+- LLM response polishing is optional and limited to wording. It can rewrite the
+  already structured `UserResponse.message`, but it cannot change status, risk
+  band, guideline IDs, or escalation conditions. Unsafe polish output falls back
+  to the deterministic response.
+
+Interview summary:
+
+> I evaluate AI behavior with both quality contracts and operational telemetry.
+> The Golden Dataset checks semantic contracts like risk triage, guideline
+> grounding, forbidden diagnostic language, retrieval relevance, and API
+> boundaries. Then the eval runner records latency and optional LLM usage, so I
+> can detect both behavioral regressions and cost or performance regressions
+> after prompt, retrieval, or agent changes. I am careful not to call this a
+> full human-labeled hallucination benchmark or true TTFT measurement until the
+> app has token-level streaming instrumentation. For now, PawCare streams safe
+> workflow status events and sends final medical guidance only after safety
+> review.
+
+MCP sidecar:
+
+- `pawcare.mcp_server` exposes PawCare capabilities as local MCP tools for
+  external AI clients and coding agents.
+- The MCP layer is read-only in v1. It can screen abnormal signals, retrieve
+  care context, preview a safe response, and run the Golden Dataset.
+- MCP tools must not append observations, mutate pet profiles, write SQLite
+  state, crawl third-party platforms, or expose internal `agent_outputs`,
+  `proposed_update`, or `safety_review` payloads.
+- Product traffic still flows through FastAPI and `PetMessageService`; MCP is a
+  structured tool interface beside the product API, not a replacement.
+
+Interview summary:
+
+> I added a local MCP sidecar so PawCare's stable safety and retrieval
+> capabilities can be called by external AI clients as structured tools. The
+> tools are intentionally read-only: they can screen abnormal signals, retrieve
+> non-diagnostic care context, preview the safe response chain, and run the
+> Golden Dataset, but they cannot mutate user pet records or bypass the
+> Coordinator/Safety workflow. This gives the project MCP-style extensibility
+> while preserving deterministic safety boundaries.
+
+Long-term memory maintenance:
+
+- `python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3` rebuilds
+  daily, weekly, and monthly pet summaries from SQLite observations.
+- The command supports full database rebuilds, per-user rebuilds, per-pet
+  rebuilds, and dry runs.
+- It is intentionally offline/manual in v1. Future cron jobs, FastAPI
+  background tasks, or production queues should reuse the same rebuild function
+  rather than duplicating summary logic.
+
+Interview summary:
+
+> PawCare has the summary worker logic implemented as an offline rebuild
+> command. I chose this before adding a production scheduler because the current
+> app is SQLite-backed and local-first. The important part is that raw
+> observations can be compressed into daily, weekly, and monthly pet memory
+> summaries; production scheduling is a deployment concern that can be added
+> later with cron or a queue once the infrastructure exists.
+
 ---
 
 ## 4. Safety Checklist

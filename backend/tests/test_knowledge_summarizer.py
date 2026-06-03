@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from pawcare.services import (
     DeterministicKnowledgeSummarizer,
+    LLMUsageCollector,
     OpenAIKnowledgeSummarizer,
 )
 
@@ -49,6 +50,42 @@ def test_openai_summarizer_uses_fake_client_without_network() -> None:
     )
 
     assert summary == "A safe fake summary."
+
+
+def test_openai_summarizer_records_usage_when_response_includes_usage() -> None:
+    class FakeResponses:
+        def create(self, *, model: str, input: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                output_text="A safe fake summary.",
+                usage=SimpleNamespace(
+                    input_tokens=100,
+                    output_tokens=25,
+                    total_tokens=125,
+                ),
+            )
+
+    class FakeClient:
+        responses = FakeResponses()
+
+    usage_collector = LLMUsageCollector()
+    summary = OpenAIKnowledgeSummarizer(
+        client=FakeClient(),
+        model="test-model",
+        usage_collector=usage_collector,
+    ).summarize(
+        matches=MATCHES,
+        raw_text="cat cannot pee, should I worry?",
+        pet_context={"name": "NiaoNiao"},
+    )
+
+    usage = usage_collector.summary()
+
+    assert summary == "A safe fake summary."
+    assert usage["available"] is True
+    assert usage["prompt_tokens"] == 100
+    assert usage["completion_tokens"] == 25
+    assert usage["total_tokens"] == 125
+    assert usage["estimated_cost_usd"] is not None
 
 
 def test_openai_summarizer_falls_back_on_failure() -> None:

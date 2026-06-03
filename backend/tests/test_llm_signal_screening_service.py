@@ -3,19 +3,25 @@ from pawcare.services.llm_signal_screening_service import (
     OpenAILLMSignalScreeningService,
     should_llm_screen,
 )
+from pawcare.services.llm_usage import LLMUsageCollector
 
 
 class _FakeResponses:
-    def __init__(self, output_text: str) -> None:
+    def __init__(self, output_text: str, usage=None) -> None:
         self.output_text = output_text
+        self.usage = usage
 
     def create(self, *, model: str, input: str):
-        return type("FakeResponse", (), {"output_text": self.output_text})()
+        return type(
+            "FakeResponse",
+            (),
+            {"output_text": self.output_text, "usage": self.usage},
+        )()
 
 
 class _FakeClient:
-    def __init__(self, output_text: str) -> None:
-        self.responses = _FakeResponses(output_text)
+    def __init__(self, output_text: str, usage=None) -> None:
+        self.responses = _FakeResponses(output_text, usage=usage)
 
 
 def test_deterministic_llm_signal_screening_is_noop() -> None:
@@ -54,6 +60,40 @@ def test_openai_llm_signal_screening_parses_structured_json() -> None:
     assert result.suggested_guideline_ids == ["GL_LAMENESS_001"]
     assert result.confidence == 0.72
     assert "Movement concern" in result.reasoning_summary
+
+
+def test_openai_llm_signal_screening_records_usage_when_response_includes_usage() -> None:
+    usage_collector = LLMUsageCollector()
+    service = OpenAILLMSignalScreeningService(
+        client=_FakeClient(
+            """
+            {
+              "possible_domains": ["health"],
+              "matched_phrases": ["moving strangely"],
+              "suggested_canonical_terms": ["mobility_change"],
+              "suggested_guideline_ids": ["GL_LAMENESS_001"],
+              "confidence": 0.7,
+              "reasoning_summary": "Movement concern should be reviewed."
+            }
+            """,
+            usage={"prompt_tokens": 80, "completion_tokens": 20, "total_tokens": 100},
+        ),
+        model="test-model",
+        usage_collector=usage_collector,
+    )
+
+    result = service.screen(
+        raw_text="Mochi is moving strangely, is this normal?",
+        pet_context={"name": "Mochi"},
+        target="health",
+    )
+    usage = usage_collector.summary()
+
+    assert not result.is_empty()
+    assert usage["available"] is True
+    assert usage["prompt_tokens"] == 80
+    assert usage["completion_tokens"] == 20
+    assert usage["total_tokens"] == 100
 
 
 def test_openai_llm_signal_screening_blocks_unsafe_diagnosis_or_medication_text() -> None:

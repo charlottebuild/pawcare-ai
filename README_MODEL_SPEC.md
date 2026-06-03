@@ -85,6 +85,22 @@ Then open `http://127.0.0.1:8000/app`. The local app stores users, pet profiles,
 
 The FastAPI app factory is available at `pawcare.api:create_app`. That default factory still uses an in-memory repository for tests and demos; `create_local_app` is the local/friend-testing entrypoint.
 
+Run the local MCP server for external AI clients or coding agents:
+
+```bash
+python -m pawcare.mcp_server
+```
+
+The MCP server is a read-only, sidecar tool layer. It exposes structured tools for abnormal-signal screening, care-context retrieval, safe response preview, and Golden Dataset evaluation. It does not modify pet records, append observations, expose internal agent outputs, or crawl Reddit/Xiaohongshu.
+
+Rebuild local long-term pet memory summaries:
+
+```bash
+python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3
+```
+
+This offline command rebuilds daily, weekly, and monthly summaries from stored observations. It is intentionally manual in v1; a future cron job, FastAPI background task, or production queue can call the same worker once deployment infrastructure exists.
+
 ---
 
 ## Vibe Coding Rule

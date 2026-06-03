@@ -57,7 +57,14 @@ def test_golden_dataset_runner_passes_all_cases() -> None:
     assert summary.category_scores["normal_update"]["passed"] >= 4
     assert summary.metric_scores["risk_classification"]["pass_rate"] == 1.0
     assert summary.metric_scores["safety_forbidden_text"]["pass_rate"] == 1.0
+    assert summary.latency_summary["case_count"] == len(summary.results)
+    assert summary.latency_summary["p95_ms"] >= 0
+    assert summary.latency_summary["ttft_ms"] is None
+    assert summary.quality_summary["retrieval_relevance_pass_rate"] == 1.0
+    assert summary.quality_summary["hallucination_safety_pass_rate"] == 1.0
+    assert summary.cost_summary["available"] is False
     assert "Metric scores:" in summary.report()
+    assert "Latency summary:" in summary.report()
     assert summary.as_dict()["summary"]["passed"] is True
 
 
@@ -115,5 +122,11 @@ def test_golden_runner_writes_json_report(tmp_path: Path) -> None:
     assert report["summary"]["passed"] is True
     assert "category_scores" in report
     assert "metric_scores" in report
+    assert "latency_summary" in report
+    assert "quality_summary" in report
+    assert "cost_summary" in report
     assert "case_results" in report
+    assert all("duration_ms" in result for result in report["case_results"])
     assert report["metric_scores"]["care_context_retrieval"]["pass_rate"] == 1.0
+    assert report["quality_summary"]["hallucination_safety_pass_rate"] == 1.0
+    assert report["cost_summary"]["available"] is False

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 import re
-from typing import Any
+from typing import Any, Iterable
 
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,10 +20,12 @@ from pawcare.services import (
     PetRecordAccessError,
     PetRepository,
     ProfessionalReferenceService,
+    ResponsePolisher,
     SQLitePetRepository,
     SimilarCaseService,
     UserAccount,
     build_knowledge_summarizer,
+    build_response_polisher,
 )
 from pawcare.services.knowledge_summarizer import KnowledgeSummarizer
 
@@ -107,12 +110,14 @@ def create_app(
     similar_case_service: SimilarCaseService | None = None,
     professional_reference_service: ProfessionalReferenceService | None = None,
     knowledge_summarizer: KnowledgeSummarizer | None = None,
+    response_polisher: ResponsePolisher | None = None,
 ) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
     case_service = similar_case_service or SimilarCaseService()
     reference_service = professional_reference_service or ProfessionalReferenceService()
     summarizer = knowledge_summarizer or build_knowledge_summarizer()
+    polisher = response_polisher or build_response_polisher()
     app = FastAPI(title="PawCare AI API", version="0.1.0")
     _mount_web_app(app)
 
@@ -250,25 +255,13 @@ def create_app(
         )
         professional_payload = reference_service.as_payload(professional_matches)
         case_payload = case_service.as_payload(case_matches)
-        context_summary = summarizer.summarize(
-            matches=professional_payload + case_payload,
+        return _care_context_payload(
+            professional_payload=professional_payload,
+            case_payload=case_payload,
             raw_text=request.raw_text,
-            pet_context={
-                "pet_id": pet.pet_id,
-                "name": pet.dog_profile.name,
-                "species": pet.dog_profile.species,
-                "breed": pet.dog_profile.breed,
-            },
+            pet=pet,
+            summarizer=summarizer,
         )
-        return {
-            "non_diagnostic_notice": (
-                "Professional references and similar cases are supporting context, not a "
-                "diagnosis. Discuss concerning signs with a veterinarian."
-            ),
-            "context_summary": context_summary,
-            "professional_references": professional_payload,
-            "related_cases": case_payload,
-        }
 
     @app.post("/v1/users/{user_id}/pets/{pet_id}/messages")
     def create_message(
@@ -286,7 +279,77 @@ def create_app(
             )
         except PetRecordAccessError as exc:
             raise _pet_not_found() from exc
+        response = polisher.polish(response=response, care_context=None)
         return jsonable_encoder(response)
+
+    @app.post("/v1/users/{user_id}/pets/{pet_id}/messages/stream")
+    def create_message_stream(
+        user_id: str,
+        pet_id: str,
+        request: CreateMessageRequest,
+    ) -> StreamingResponse:
+        normalized_pet_id = _validate_pet_id(pet_id)
+        _get_accessible_pet(
+            repository=pet_repository,
+            user_id=user_id,
+            pet_id=normalized_pet_id,
+        )
+
+        def event_stream() -> Iterable[str]:
+            yield _sse(
+                "status",
+                {"stage": "received", "message": "Received your update."},
+            )
+            yield _sse(
+                "status",
+                {"stage": "loading_pet", "message": "Loading pet workspace."},
+            )
+            yield _sse(
+                "status",
+                {
+                    "stage": "processing_message",
+                    "message": "Checking health and behavior signals.",
+                },
+            )
+            response = message_service.process_message(
+                user_id=user_id,
+                pet_id=normalized_pet_id,
+                raw_text=request.raw_text,
+                timestamp=request.timestamp,
+                workflow_id=request.workflow_id,
+            )
+            yield _sse(
+                "status",
+                {
+                    "stage": "retrieving_care_context",
+                    "message": "Retrieving care context.",
+                },
+            )
+            pet = pet_repository.get_pet(user_id=user_id, pet_id=normalized_pet_id)
+            care_context = _build_care_context(
+                raw_text=request.raw_text,
+                pet=pet,
+                reference_service=reference_service,
+                case_service=case_service,
+                summarizer=summarizer,
+            )
+            yield _sse(
+                "status",
+                {"stage": "safety_review", "message": "Final safety review complete."},
+            )
+            polished_response = polisher.polish(
+                response=response,
+                care_context=care_context,
+            )
+            yield _sse(
+                "final",
+                {
+                    "response": jsonable_encoder(polished_response),
+                    "care_context": care_context,
+                },
+            )
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     return app
 
@@ -338,6 +401,68 @@ def _get_accessible_pet(
 
 def _pet_not_found() -> HTTPException:
     return HTTPException(status_code=404, detail="Pet record is not available.")
+
+
+def _build_care_context(
+    *,
+    raw_text: str,
+    pet: PetRecord,
+    reference_service: ProfessionalReferenceService,
+    case_service: SimilarCaseService,
+    summarizer: KnowledgeSummarizer,
+) -> dict[str, Any]:
+    professional_matches = reference_service.find_matches(
+        raw_text=raw_text,
+        pet=pet,
+        recent_observations=pet.observations,
+        limit=3,
+    )
+    case_matches = case_service.find_matches(
+        raw_text=raw_text,
+        pet=pet,
+        recent_observations=pet.observations,
+        limit=3,
+    )
+    return _care_context_payload(
+        professional_payload=reference_service.as_payload(professional_matches),
+        case_payload=case_service.as_payload(case_matches),
+        raw_text=raw_text,
+        pet=pet,
+        summarizer=summarizer,
+    )
+
+
+def _care_context_payload(
+    *,
+    professional_payload: list[dict[str, object]],
+    case_payload: list[dict[str, object]],
+    raw_text: str,
+    pet: PetRecord,
+    summarizer: KnowledgeSummarizer,
+) -> dict[str, Any]:
+    context_summary = summarizer.summarize(
+        matches=professional_payload + case_payload,
+        raw_text=raw_text,
+        pet_context={
+            "pet_id": pet.pet_id,
+            "name": pet.dog_profile.name,
+            "species": pet.dog_profile.species,
+            "breed": pet.dog_profile.breed,
+        },
+    )
+    return {
+        "non_diagnostic_notice": (
+            "Professional references and similar cases are supporting context, not a "
+            "diagnosis. Discuss concerning signs with a veterinarian."
+        ),
+        "context_summary": context_summary,
+        "professional_references": professional_payload,
+        "related_cases": case_payload,
+    }
+
+
+def _sse(event: str, data: dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
 
 
 def _pet_summary(pet: PetRecord) -> dict[str, Any]:

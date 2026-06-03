@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol
 
+from pawcare.services.llm_usage import LLMUsageCollector, extract_openai_usage_record
+
 
 class KnowledgeSummarizer(Protocol):
     def summarize(
@@ -69,10 +71,12 @@ class OpenAIKnowledgeSummarizer:
         fallback: KnowledgeSummarizer | None = None,
         client: Any | None = None,
         model: str | None = None,
+        usage_collector: LLMUsageCollector | None = None,
     ) -> None:
         self.fallback = fallback or DeterministicKnowledgeSummarizer()
         self.client = client
         self.model = model or os.getenv("PAWCARE_SUMMARY_MODEL", "gpt-5.2")
+        self.usage_collector = usage_collector
 
     def summarize(
         self,
@@ -93,6 +97,14 @@ class OpenAIKnowledgeSummarizer:
                     pet_context=pet_context,
                 ),
             )
+            if self.usage_collector is not None:
+                self.usage_collector.add(
+                    extract_openai_usage_record(
+                        response,
+                        model=self.model,
+                        source="knowledge_summarizer",
+                    )
+                )
             text = getattr(response, "output_text", "")
             return str(text).strip() or self._fallback(
                 matches=matches,

@@ -5,6 +5,7 @@ import os
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from pawcare.services.llm_usage import LLMUsageCollector, extract_openai_usage_record
 from pawcare.skills.symptom_understanding import TRIAGE_INTENT_TERMS, contains_any
 
 
@@ -60,10 +61,12 @@ class OpenAILLMSignalScreeningService:
         fallback: LLMSignalScreeningService | None = None,
         client: Any | None = None,
         model: str | None = None,
+        usage_collector: LLMUsageCollector | None = None,
     ) -> None:
         self.fallback = fallback or DeterministicLLMSignalScreeningService()
         self.client = client
         self.model = model or os.getenv("PAWCARE_SCREENING_MODEL", "gpt-5.2")
+        self.usage_collector = usage_collector
 
     def screen(
         self,
@@ -84,6 +87,14 @@ class OpenAILLMSignalScreeningService:
                     target=target,
                 ),
             )
+            if self.usage_collector is not None:
+                self.usage_collector.add(
+                    extract_openai_usage_record(
+                        response,
+                        model=self.model,
+                        source=f"llm_signal_screening:{target}",
+                    )
+                )
             text = str(getattr(response, "output_text", "")).strip()
             return self._parse_result(text)
         except Exception:

@@ -35,6 +35,12 @@ from pawcare.services.llm_signal_screening_service import (
     OpenAILLMSignalScreeningService,
     build_llm_signal_screening_service,
 )
+from pawcare.services.llm_usage import (
+    LLMUsageCollector,
+    LLMUsageRecord,
+    extract_openai_usage_record,
+    summarize_usage,
+)
 from pawcare.services.in_memory_pet_repository import InMemoryPetRepository
 from pawcare.services.pet_message_service import PetMessageService
 from pawcare.services.pet_models import (
@@ -48,6 +54,12 @@ from pawcare.services.pet_models import (
 from pawcare.services.pet_repository import PetRecordAccessError, PetRepository
 from pawcare.services.pet_summary_worker import SummaryWorker
 from pawcare.services.professional_reference_service import ProfessionalReferenceService
+from pawcare.services.response_polisher import (
+    DeterministicResponsePolisher,
+    OpenAIResponsePolisher,
+    ResponsePolisher,
+    build_response_polisher,
+)
 from pawcare.services.similar_case_service import SimilarCaseService
 from pawcare.storage import SQLitePetRepository
 
@@ -88,10 +100,18 @@ __all__ = [
     "WeeklyPetSummary",
     "DeterministicKnowledgeSummarizer",
     "DeterministicLLMSignalScreeningService",
+    "DeterministicResponsePolisher",
     "LLMSignalScreeningResult",
     "LLMSignalScreeningService",
+    "LLMUsageCollector",
+    "LLMUsageRecord",
+    "OpenAIResponsePolisher",
+    "ResponsePolisher",
     "build_knowledge_summarizer",
     "OpenAILLMSignalScreeningService",
     "build_llm_signal_screening_service",
+    "build_response_polisher",
+    "extract_openai_usage_record",
     "seed_professional_knowledge_documents",
+    "summarize_usage",
 ]
