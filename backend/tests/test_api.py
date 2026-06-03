@@ -8,6 +8,7 @@ from pawcare.services import (
     InMemoryPetRepository,
     PetRecord,
     ResponsePolisher,
+    SemanticCareContextCache,
     SQLitePetRepository,
     UserAccount,
 )
@@ -548,6 +549,44 @@ def test_care_context_endpoint_returns_professional_references_and_cases() -> No
     assert reference["what_to_record"]
     assert "full_text" not in reference
     assert case["case_id"] == "case_oral_neck_001"
+    assert body["cache_status"] == "miss"
+
+
+def test_care_context_endpoint_uses_semantic_cache_for_similar_queries() -> None:
+    cache = SemanticCareContextCache()
+    client = TestClient(
+        create_app(
+            repository=InMemoryPetRepository(),
+            care_context_cache=cache,
+        )
+    )
+    _create_user_and_two_pets(client)
+
+    first = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={"raw_text": "Mochi poo blood this morning."},
+    )
+    second = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={"raw_text": "Mochi had bloody stool this morning."},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json()["cache_status"] == "miss"
+    assert second.json()["cache_status"] == "hit"
+    assert second.json()["professional_references"][0]["domain"] == "gi"
+    for forbidden_field in (
+        "response",
+        "status",
+        "risk_band",
+        "source_guideline_ids",
+        "escalation_conditions",
+        "agent_outputs",
+        "proposed_update",
+        "safety_review",
+    ):
+        assert forbidden_field not in second.json()
 
 
 def test_care_context_endpoint_returns_urinary_context_for_cat_red_flag() -> None:
@@ -637,7 +676,13 @@ def test_care_context_endpoint_returns_gi_context_for_poo_blood_phrase() -> None
 
 
 def test_care_context_plain_update_returns_empty_context() -> None:
-    client = _client()
+    cache = SemanticCareContextCache()
+    client = TestClient(
+        create_app(
+            repository=InMemoryPetRepository(),
+            care_context_cache=cache,
+        )
+    )
     _create_user_and_two_pets(client)
 
     response = client.post(
@@ -649,6 +694,37 @@ def test_care_context_plain_update_returns_empty_context() -> None:
     assert response.json()["context_summary"] == ""
     assert response.json()["professional_references"] == []
     assert response.json()["related_cases"] == []
+    assert response.json()["cache_status"] == "miss"
+    assert len(cache) == 0
+
+
+def test_message_endpoint_does_not_use_semantic_cache_for_final_response() -> None:
+    cache = SemanticCareContextCache()
+    client = TestClient(
+        create_app(
+            repository=InMemoryPetRepository(),
+            care_context_cache=cache,
+        )
+    )
+    _create_user_and_two_pets(client)
+
+    care_context = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={"raw_text": "Mochi poo blood this morning."},
+    )
+    message = client.post(
+        "/v1/users/user_123/pets/dog_mochi/messages",
+        json={
+            "raw_text": "Mochi poo blood this morning.",
+            "timestamp": "2026-05-08T08:00:00-07:00",
+        },
+    )
+
+    assert care_context.json()["cache_status"] == "miss"
+    assert message.status_code == 200
+    assert message.json()["status"] == "escalate"
+    assert "GL_STOOL_001" in message.json()["source_guideline_ids"]
+    assert "cache_status" not in message.json()
 
 
 def test_care_context_missing_or_unauthorized_pet_returns_generic_404() -> None:

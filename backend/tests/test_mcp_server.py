@@ -5,6 +5,14 @@ from pawcare import mcp_server
 
 def test_mcp_server_imports_and_registers_tools() -> None:
     assert hasattr(mcp_server, "mcp")
+    assert {
+        tool.name for tool in mcp_server.registry.tools
+    } == {
+        "screen_abnormal_signals",
+        "search_care_context",
+        "preview_pet_response",
+        "run_golden_eval",
+    }
     if hasattr(mcp_server.mcp, "tools"):
         assert {
             "screen_abnormal_signals",
@@ -86,6 +94,31 @@ def test_search_care_context_returns_professional_references_and_cases() -> None
     }
     assert "eye" in eye_domains
     assert "eye_trauma" in eye_topics
+
+
+def test_search_care_context_uses_semantic_cache_without_internal_fields() -> None:
+    first = mcp_server.search_care_context(
+        "Mochi poo blood this morning.",
+        pet_profile={"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    )
+    second = mcp_server.search_care_context(
+        "Mochi had bloody stool this morning.",
+        pet_profile={"id": "dog_mochi", "name": "Mochi", "species": "dog"},
+    )
+
+    assert first["cache_status"] in {"miss", "hit"}
+    assert second["cache_status"] == "hit"
+    assert second["professional_references"][0]["domain"] == "gi"
+    for forbidden_field in (
+        "agent_outputs",
+        "proposed_update",
+        "safety_review",
+        "response",
+        "risk_band",
+        "source_guideline_ids",
+        "escalation_conditions",
+    ):
+        assert forbidden_field not in second
 
 
 def test_preview_pet_response_uses_safety_chain_without_internal_fields() -> None:

@@ -60,6 +60,11 @@ from pawcare.services.response_polisher import (
     ResponsePolisher,
     build_response_polisher,
 )
+from pawcare.services.semantic_care_context_cache import (
+    SemanticCareContextCache,
+    SemanticCareContextCacheKey,
+    SemanticCareContextCacheLookup,
+)
 from pawcare.services.similar_case_service import SimilarCaseService
 from pawcare.storage import SQLitePetRepository
 
@@ -94,6 +99,9 @@ __all__ = [
     "ProfessionalReferenceService",
     "SQLitePetRepository",
     "SQLiteKnowledgeFTSIndex",
+    "SemanticCareContextCache",
+    "SemanticCareContextCacheKey",
+    "SemanticCareContextCacheLookup",
     "SimilarCaseService",
     "SummaryWorker",
     "UserAccount",

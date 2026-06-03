@@ -91,7 +91,7 @@ Run the local MCP server for external AI clients or coding agents:
 python -m pawcare.mcp_server
 ```
 
-The MCP server is a read-only, sidecar tool layer. It exposes structured tools for abnormal-signal screening, care-context retrieval, safe response preview, and Golden Dataset evaluation. It does not modify pet records, append observations, expose internal agent outputs, or crawl Reddit/Xiaohongshu.
+The MCP server is a read-only, sidecar tool layer. It exposes structured tools for abnormal-signal screening, care-context retrieval, safe response preview, and Golden Dataset evaluation. Tools are registered through a controlled registry with explicit permission metadata. It does not modify pet records, append observations, expose internal agent outputs, or crawl Reddit/Xiaohongshu.
 
 Rebuild local long-term pet memory summaries:
 
@@ -100,6 +100,8 @@ python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3
 ```
 
 This offline command rebuilds daily, weekly, and monthly summaries from stored observations. It is intentionally manual in v1; a future cron job, FastAPI background task, or production queue can call the same worker once deployment infrastructure exists.
+
+Care-context retrieval uses a lightweight in-memory semantic cache. The cache reuses non-diagnostic professional references, similar cases, and context summaries for semantically similar symptom queries. It does not cache final `UserResponse` status, risk band, guideline IDs, or escalation conditions.
 
 ---
 

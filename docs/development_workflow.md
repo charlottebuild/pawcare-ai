@@ -162,6 +162,8 @@ MCP sidecar:
 
 - `pawcare.mcp_server` exposes PawCare capabilities as local MCP tools for
   external AI clients and coding agents.
+- `PawCareMCPToolRegistry` is the controlled allowlist for MCP tools. Each tool
+  declares a description, permission, handler, and safety metadata.
 - The MCP layer is read-only in v1. It can screen abnormal signals, retrieve
   care context, preview a safe response, and run the Golden Dataset.
 - MCP tools must not append observations, mutate pet profiles, write SQLite
@@ -174,11 +176,12 @@ Interview summary:
 
 > I added a local MCP sidecar so PawCare's stable safety and retrieval
 > capabilities can be called by external AI clients as structured tools. The
-> tools are intentionally read-only: they can screen abnormal signals, retrieve
-> non-diagnostic care context, preview the safe response chain, and run the
-> Golden Dataset, but they cannot mutate user pet records or bypass the
-> Coordinator/Safety workflow. This gives the project MCP-style extensibility
-> while preserving deterministic safety boundaries.
+> tools are registered through an explicit allowlist with permission metadata,
+> not dynamic discovery. They are intentionally read-only: they can screen
+> abnormal signals, retrieve non-diagnostic care context, preview the safe
+> response chain, and run the Golden Dataset, but they cannot mutate user pet
+> records or bypass the Coordinator/Safety workflow. This gives the project
+> MCP-style extensibility while preserving deterministic safety boundaries.
 
 Long-term memory maintenance:
 
@@ -198,6 +201,25 @@ Interview summary:
 > observations can be compressed into daily, weekly, and monthly pet memory
 > summaries; production scheduling is a deployment concern that can be added
 > later with cron or a queue once the infrastructure exists.
+
+Semantic care-context cache:
+
+- PawCare may cache non-diagnostic care context for semantically similar symptom
+  queries, using canonical signals plus pet context.
+- Cached payloads can include professional references, similar cases, context
+  summary, and the non-diagnostic notice.
+- Cached payloads must not include final `UserResponse` fields such as status,
+  risk band, guideline IDs, escalation conditions, or user-facing final
+  medical guidance.
+
+Interview summary:
+
+> I use semantic caching for retrieval context, not final medical decisions.
+> Similar symptom queries like "poo blood" and "bloody stool" can reuse the same
+> professional references, similar cases, and context summary, which avoids
+> repeating retrieval and summarization work. But the final response still runs
+> through the current pet state, Coordinator, and SafetyAgent, so cached context
+> cannot replace triage or escalation logic.
 
 ---
 
