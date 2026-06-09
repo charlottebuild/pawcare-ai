@@ -138,6 +138,24 @@ The benchmark reports cache hit rate, avoided retrieval/summarizer work, estimat
 
 ---
 
+## CI Regression Checks
+
+GitHub Actions runs PawCare's regression gate on push and pull request:
+
+```bash
+python -m pip install -e ".[dev]"
+cd frontend && npm ci && npm run build
+cd ..
+pytest -q
+python -m pawcare.evaluation.golden_runner --report-json pawcare_eval_report.json
+```
+
+The CI workflow checks backend/API behavior, React build health, and Golden Dataset safety contracts. It uploads `pawcare_eval_report.json` as an artifact for inspecting risk triage, guideline grounding, retrieval relevance, API boundaries, safety constraints, and latency summary.
+
+This is CI only. PawCare does not auto-deploy from CI; CD should wait until there is a real staging or production environment, auth, secret management, and a database deployment strategy.
+
+---
+
 ## Vibe Coding Rule
 
 Before changing agent behavior, skill contracts, workflow state, or recommendation logic:
