@@ -28,6 +28,29 @@ class MonitoringScanReport:
     def alerts_generated(self) -> int:
         return len(self.alerts)
 
+    @property
+    def high_risk_alerts_generated(self) -> int:
+        return len(
+            [
+                alert
+                for alert in self.alerts
+                if alert.alert_type == "observation_risk" and alert.severity == "high"
+            ]
+        )
+
+    @property
+    def routine_alerts_generated(self) -> int:
+        return len([alert for alert in self.alerts if alert.alert_type == "routine_due"])
+
+    @property
+    def red_flag_domains(self) -> list[str]:
+        domains = {
+            alert.source.removeprefix("observation:").split(":", 1)[0]
+            for alert in self.alerts
+            if alert.source.startswith("observation:")
+        }
+        return sorted(domain for domain in domains if domain)
+
     def as_dict(self) -> dict[str, object]:
         return {
             "db_path": self.db_path,
@@ -36,6 +59,9 @@ class MonitoringScanReport:
             "routines_checked": self.routines_checked,
             "observations_checked": self.observations_checked,
             "alerts_generated": self.alerts_generated,
+            "high_risk_alerts_generated": self.high_risk_alerts_generated,
+            "routine_alerts_generated": self.routine_alerts_generated,
+            "red_flag_domains": self.red_flag_domains,
             "duration_ms": self.duration_ms,
             "alerts": [asdict(alert) for alert in self.alerts],
         }
@@ -49,6 +75,10 @@ class MonitoringScanReport:
             f"Routines checked: {self.routines_checked}",
             f"Observations checked: {self.observations_checked}",
             f"Alerts generated: {self.alerts_generated}",
+            f"High-risk observation alerts: {self.high_risk_alerts_generated}",
+            f"Routine alerts: {self.routine_alerts_generated}",
+            "Red-flag domains: "
+            + (", ".join(self.red_flag_domains) if self.red_flag_domains else "none"),
             f"Duration: {self.duration_ms:.3f}ms",
         ]
         for alert in self.alerts:
@@ -60,7 +90,7 @@ class MonitoringScanReport:
 
 
 class MonitoringWorker:
-    """Local scheduled monitoring scanner for SQLite-backed PawCare workspaces."""
+    """Local abnormal-signal scanner for SQLite-backed PawCare workspaces."""
 
     def scan(
         self,
@@ -183,9 +213,10 @@ class MonitoringWorker:
     ) -> list[MonitoringAlert]:
         alerts: list[MonitoringAlert] = []
         for observation in observations:
-            reason = self._high_risk_reason(observation)
-            if reason is None:
+            signal = self._high_risk_signal(observation)
+            if signal is None:
                 continue
+            domain, reason = signal
             alerts.append(
                 self._alert(
                     pet=pet,
@@ -196,44 +227,44 @@ class MonitoringWorker:
                         "Review this update and contact a veterinarian urgently if the "
                         "sign is ongoing or worsening."
                     ),
-                    source=f"observation:{observation.observation_id}",
+                    source=f"observation:{domain}:{observation.observation_id}",
                     now=now,
                 )
             )
         return alerts
 
-    def _high_risk_reason(self, observation: Observation) -> str | None:
+    def _high_risk_signal(self, observation: Observation) -> tuple[str, str] | None:
         context = observation.health_context or {}
         raw_text = observation.raw_text
         if context.get("urinary_obstruction"):
-            return "Possible urinary obstruction red flag was recorded."
+            return "urinary", "Urinary red flag was recorded."
         if context.get("respiratory_distress"):
-            return "Respiratory distress red flag was recorded."
+            return "respiratory", "Respiratory distress red flag was recorded."
         if observation.category == ObservationCategory.stool and context.get(
             "stool_quality"
         ) in {"bloody", "black_tarry"}:
-            return "Blood or black/tarry stool was recorded."
+            return "gi", "Blood or black/tarry stool was recorded."
         if observation.category == ObservationCategory.vomiting and context.get(
             "vomiting_reported"
         ):
-            return "Vomiting was recorded and should be monitored for repetition or worsening."
+            return "gi", "Vomiting was recorded and should be monitored for repetition or worsening."
         if observation.category == ObservationCategory.mobility and (
             context.get("weight_bearing") == "non_weight_bearing"
             or context.get("post_op_context")
         ):
-            return "Post-op or non-weight-bearing mobility concern was recorded."
+            return "mobility", "Post-op or non-weight-bearing mobility concern was recorded."
         if contains_any(raw_text, ["seizure", "convulsion", "shaking uncontrollably", "抽搐"]):
-            return "Seizure-like wording was recorded."
+            return "neurologic", "Seizure-like wording was recorded."
         if contains_any(
             raw_text,
             ["bloated", "bloat", "distended belly", "trying to vomit but nothing"],
         ):
-            return "Abdominal bloat/distension red flag wording was recorded."
+            return "abdominal", "Abdominal distension or unproductive retching wording was recorded."
         if contains_any(
             raw_text,
             ["eye injury", "hurt eye", "eye trauma", "eye scratch", "eye popped out"],
         ):
-            return "Eye injury red flag wording was recorded."
+            return "eye", "Eye injury red flag wording was recorded."
         return None
 
     def _alert(
@@ -281,7 +312,9 @@ def run_sqlite_monitoring_scan(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run PawCare local monitoring scan.")
+    parser = argparse.ArgumentParser(
+        description="Run PawCare local abnormal-signal monitoring scan."
+    )
     parser.add_argument("--db", required=True, help="Path to PawCare SQLite database.")
     parser.add_argument("--user-id", default=None, help="Optional user id filter.")
     parser.add_argument("--pet-id", default=None, help="Optional pet id filter.")

@@ -149,15 +149,17 @@ Long-term memory maintenance:
   background tasks, or production queues should reuse the same rebuild function
   rather than duplicating summary logic.
 
-Local scheduled monitoring:
+Local abnormal-signal monitoring:
 
 - `python -m pawcare.monitoring.monitoring_worker --db pawcare.local.sqlite3`
-  scans SQLite pet records for due care routines and recent high-risk
-  observations.
+  scans SQLite pet records for recent high-risk observations and optional due
+  care routines.
 - The worker supports one-shot scans, optional user/pet filters, JSON reports,
   and local watch mode.
-- Monitoring alerts are local workflow outputs. They do not replace the
-  Coordinator/Safety workflow and are not production push notifications.
+- Observation alerts are high-severity, non-diagnostic red-flag outputs. Routine
+  alerts are low-severity product support.
+- Monitoring alerts do not replace the Coordinator/Safety workflow and are not
+  production push notifications.
 - Benchmark tests assert seeded local scans complete under 2 seconds.
 
 Semantic care-context cache:
