@@ -44,8 +44,10 @@ from pawcare.services.llm_usage import (
 from pawcare.services.in_memory_pet_repository import InMemoryPetRepository
 from pawcare.services.pet_message_service import PetMessageService
 from pawcare.services.pet_models import (
+    CareRoutine,
     DailyPetSummary,
     DogContextSnapshot,
+    MonitoringAlert,
     MonthlyPetSummary,
     PetRecord,
     UserAccount,
@@ -60,6 +62,11 @@ from pawcare.services.response_polisher import (
     ResponsePolisher,
     build_response_polisher,
 )
+from pawcare.services.semantic_care_context_cache import (
+    SemanticCareContextCache,
+    SemanticCareContextCacheKey,
+    SemanticCareContextCacheLookup,
+)
 from pawcare.services.similar_case_service import SimilarCaseService
 from pawcare.storage import SQLitePetRepository
 
@@ -68,6 +75,7 @@ __all__ = [
     "BehaviorCareReference",
     "BehaviorReferenceMatch",
     "BehaviorReferenceService",
+    "CareRoutine",
     "CommunityCase",
     "DailyPetSummary",
     "DogContextSnapshot",
@@ -83,6 +91,7 @@ __all__ = [
     "LocalKnowledgeIndex",
     "LogProcessingResult",
     "LogProcessingService",
+    "MonitoringAlert",
     "MonthlyPetSummary",
     "OpenAIKnowledgeSummarizer",
     "PetMessageService",
@@ -94,6 +103,9 @@ __all__ = [
     "ProfessionalReferenceService",
     "SQLitePetRepository",
     "SQLiteKnowledgeFTSIndex",
+    "SemanticCareContextCache",
+    "SemanticCareContextCacheKey",
+    "SemanticCareContextCacheLookup",
     "SimilarCaseService",
     "SummaryWorker",
     "UserAccount",

@@ -21,6 +21,7 @@ from pawcare.services import (
     PetRepository,
     ProfessionalReferenceService,
     ResponsePolisher,
+    SemanticCareContextCache,
     SQLitePetRepository,
     SimilarCaseService,
     UserAccount,
@@ -111,6 +112,7 @@ def create_app(
     professional_reference_service: ProfessionalReferenceService | None = None,
     knowledge_summarizer: KnowledgeSummarizer | None = None,
     response_polisher: ResponsePolisher | None = None,
+    care_context_cache: SemanticCareContextCache | None = None,
 ) -> FastAPI:
     pet_repository = repository or InMemoryPetRepository()
     message_service = PetMessageService(repository=pet_repository)
@@ -118,6 +120,9 @@ def create_app(
     reference_service = professional_reference_service or ProfessionalReferenceService()
     summarizer = knowledge_summarizer or build_knowledge_summarizer()
     polisher = response_polisher or build_response_polisher()
+    semantic_cache = (
+        care_context_cache if care_context_cache is not None else SemanticCareContextCache()
+    )
     app = FastAPI(title="PawCare AI API", version="0.1.0")
     _mount_web_app(app)
 
@@ -241,26 +246,14 @@ def create_app(
             user_id=user_id,
             pet_id=_validate_pet_id(pet_id),
         )
-        professional_matches = reference_service.find_matches(
+        return _build_care_context(
             raw_text=request.raw_text,
             pet=pet,
-            recent_observations=pet.observations,
             limit=request.limit,
-        )
-        case_matches = case_service.find_matches(
-            raw_text=request.raw_text,
-            pet=pet,
-            recent_observations=pet.observations,
-            limit=request.limit,
-        )
-        professional_payload = reference_service.as_payload(professional_matches)
-        case_payload = case_service.as_payload(case_matches)
-        return _care_context_payload(
-            professional_payload=professional_payload,
-            case_payload=case_payload,
-            raw_text=request.raw_text,
-            pet=pet,
+            reference_service=reference_service,
+            case_service=case_service,
             summarizer=summarizer,
+            cache=semantic_cache,
         )
 
     @app.post("/v1/users/{user_id}/pets/{pet_id}/messages")
@@ -329,9 +322,11 @@ def create_app(
             care_context = _build_care_context(
                 raw_text=request.raw_text,
                 pet=pet,
+                limit=3,
                 reference_service=reference_service,
                 case_service=case_service,
                 summarizer=summarizer,
+                cache=semantic_cache,
             )
             yield _sse(
                 "status",
@@ -407,29 +402,45 @@ def _build_care_context(
     *,
     raw_text: str,
     pet: PetRecord,
+    limit: int,
     reference_service: ProfessionalReferenceService,
     case_service: SimilarCaseService,
     summarizer: KnowledgeSummarizer,
+    cache: SemanticCareContextCache | None = None,
 ) -> dict[str, Any]:
+    lookup = (
+        cache.get(raw_text=raw_text, pet=pet, limit=limit)
+        if cache is not None
+        else None
+    )
+    if lookup is not None and lookup.hit:
+        return lookup.payload or {}
     professional_matches = reference_service.find_matches(
         raw_text=raw_text,
         pet=pet,
         recent_observations=pet.observations,
-        limit=3,
+        limit=limit,
     )
     case_matches = case_service.find_matches(
         raw_text=raw_text,
         pet=pet,
         recent_observations=pet.observations,
-        limit=3,
+        limit=limit,
     )
-    return _care_context_payload(
+    payload = _care_context_payload(
         professional_payload=reference_service.as_payload(professional_matches),
         case_payload=case_service.as_payload(case_matches),
         raw_text=raw_text,
         pet=pet,
         summarizer=summarizer,
     )
+    payload["cache_status"] = "miss"
+    if cache is not None:
+        cache.set(
+            key=lookup.key if lookup is not None else None,
+            payload=payload,
+        )
+    return payload
 
 
 def _care_context_payload(

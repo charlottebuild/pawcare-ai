@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pawcare.schemas.state import Observation
 from pawcare.services.pet_models import (
+    CareRoutine,
     DailyPetSummary,
     DogContextSnapshot,
     MonthlyPetSummary,
@@ -21,6 +22,7 @@ class InMemoryPetRepository:
         self._daily_summaries: dict[tuple[str, str], list[DailyPetSummary]] = {}
         self._weekly_summaries: dict[tuple[str, str], list[WeeklyPetSummary]] = {}
         self._monthly_summaries: dict[tuple[str, str], list[MonthlyPetSummary]] = {}
+        self._care_routines: dict[tuple[str, str], list[CareRoutine]] = {}
 
     def create_user(self, user: UserAccount) -> UserAccount:
         self._users[user.user_id] = user
@@ -61,6 +63,16 @@ class InMemoryPetRepository:
         pet = self.get_pet(user_id=user_id, pet_id=pet_id)
         pet.observations.extend(observations)
         return pet
+
+    def save_care_routines(
+        self, *, user_id: str, pet_id: str, routines: list[CareRoutine]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        self._care_routines[(user_id, pet_id)] = list(routines)
+
+    def list_care_routines(self, *, user_id: str, pet_id: str) -> list[CareRoutine]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        return list(self._care_routines.get((user_id, pet_id), []))
 
     def save_daily_summaries(
         self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]

@@ -510,6 +510,8 @@ class LogExtractor:
         sequence: int,
     ) -> Observation | None:
         low_energy_terms = [
+            "low energy",
+            "very low energy",
             "lethargic",
             "lying down more",
             "won't get up",
@@ -587,7 +589,7 @@ class LogExtractor:
         has_question_intent = self._contains_any(text, TRIAGE_INTENT_TERMS)
         domains = [
             ("respiratory", ["cough", "coughing", "breathing", "breath", "wheezing", "喘", "咳", "呼吸"]),
-            ("urinary", ["urine", "pee", "peeing", "urinate", "urinating", "blood in urine", "尿", "尿血"]),
+            ("urinary", ["urine", "pee", "peeing", "urinate", "urinating", "blood in urine", "litter box", "猫砂盆", "尿", "尿血"]),
             ("oral_neck", ["drool", "drooling", "saliva", "salivary", "jaw", "neck", "under jaw", "mouth", "oral", "流口水", "下巴", "脖子", "口腔"]),
             ("skin_lump", ["skin", "itch", "itching", "scratch", "scratching", "lump", "bump", "mass", "swelling", "皮肤", "痒", "包", "肿块"]),
             ("mobility", ["limp", "limping", "leg", "paw", "walk", "walking", "post-op", "acl", "ccl", "腿", "跛", "瘸", "术后"]),
@@ -676,7 +678,11 @@ class LogExtractor:
                 ("rapid growth, bleeding, discharge, or pain", ["rapid", "growing", "bleeding", "discharge", "pain", "流血", "流脓", "疼"]),
             ],
             "urinary": [
-                ("cannot urinate or repeated straining with little urine", self._urinary_obstruction_terms()),
+                (
+                    "cannot urinate or repeated straining with little urine",
+                    self._urinary_obstruction_terms()
+                    + ["few drops", "little urine", "only a few drops"],
+                ),
                 ("blood in urine", ["blood in urine", "bloody urine", "尿血"]),
             ],
             "respiratory": [
@@ -690,7 +696,11 @@ class LogExtractor:
         ]
 
     def _urinary_obstruction_terms(self) -> list[str]:
-        return URINARY_OBSTRUCTION_TERMS
+        return URINARY_OBSTRUCTION_TERMS + [
+            "few drops",
+            "little urine",
+            "only a few drops",
+        ]
 
     def _record_fields(self, domain: str) -> list[str]:
         return {

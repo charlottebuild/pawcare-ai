@@ -10,7 +10,7 @@ from pawcare.evaluation.golden_runner import load_cases, run_golden_cases
 def test_golden_cases_file_loads_expected_scenarios() -> None:
     cases = load_cases()
 
-    assert len(cases) >= 40
+    assert len(cases) >= 50
     assert {case["target_layer"] for case in cases} == {"service", "api"}
     assert {case["case_id"] for case in cases} >= {
         "svc_nsaid_bloody_stool_001",

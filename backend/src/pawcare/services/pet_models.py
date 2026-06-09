@@ -28,6 +28,33 @@ class PetRecord:
 
 
 @dataclass(frozen=True)
+class CareRoutine:
+    routine_id: str
+    user_id: str
+    pet_id: str
+    label: str
+    routine_type: str
+    schedule_kind: str
+    time_of_day: str | None = None
+    interval_hours: int | None = None
+    notes: str | None = None
+    enabled: bool = True
+
+
+@dataclass(frozen=True)
+class MonitoringAlert:
+    alert_id: str
+    user_id: str
+    pet_id: str
+    alert_type: str
+    severity: str
+    reason: str
+    recommended_next_step: str
+    source: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class DailyPetSummary:
     user_id: str
     pet_id: str

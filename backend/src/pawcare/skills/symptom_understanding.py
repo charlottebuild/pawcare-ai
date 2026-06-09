@@ -15,6 +15,7 @@ TRIAGE_INTENT_TERMS = [
     "what might",
     "what can it be",
     "could it be",
+    "could this be",
     "is it",
     "is there any problem",
     "any problem",

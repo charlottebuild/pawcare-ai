@@ -85,13 +85,30 @@ Then open `http://127.0.0.1:8000/app`. The local app stores users, pet profiles,
 
 The FastAPI app factory is available at `pawcare.api:create_app`. That default factory still uses an in-memory repository for tests and demos; `create_local_app` is the local/friend-testing entrypoint.
 
+Build the React frontend before serving `/app` after frontend changes:
+
+```bash
+cd frontend
+npm install
+npm run build
+```
+
+For frontend-only iteration, run the Vite dev server and keep FastAPI running separately:
+
+```bash
+cd frontend
+npm run dev
+```
+
+The React build writes static assets into `backend/src/pawcare/web`, which keeps the FastAPI `/app` entrypoint unchanged.
+
 Run the local MCP server for external AI clients or coding agents:
 
 ```bash
 python -m pawcare.mcp_server
 ```
 
-The MCP server is a read-only, sidecar tool layer. It exposes structured tools for abnormal-signal screening, care-context retrieval, safe response preview, and Golden Dataset evaluation. It does not modify pet records, append observations, expose internal agent outputs, or crawl Reddit/Xiaohongshu.
+The MCP server is a read-only, sidecar tool layer. It exposes structured tools for abnormal-signal screening, care-context retrieval, safe response preview, and Golden Dataset evaluation. Tools are registered through a controlled registry with explicit permission metadata. It does not modify pet records, append observations, expose internal agent outputs, or crawl Reddit/Xiaohongshu.
 
 Rebuild local long-term pet memory summaries:
 
@@ -100,6 +117,42 @@ python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3
 ```
 
 This offline command rebuilds daily, weekly, and monthly summaries from stored observations. It is intentionally manual in v1; a future cron job, FastAPI background task, or production queue can call the same worker once deployment infrastructure exists.
+
+Run a local abnormal-signal monitoring scan:
+
+```bash
+python -m pawcare.monitoring.monitoring_worker --db pawcare.local.sqlite3
+```
+
+The monitoring worker reads SQLite pet records, recent observations, and optional care routines. It can run once or in local watch mode, and it prioritizes non-diagnostic alerts for recent high-risk health signals such as urinary, GI, respiratory, neurologic, eye, abdominal, and post-op mobility red flags. Routine checks remain low-priority product support. This is a local workflow, not a production daemon or hosted alert delivery system.
+
+Care-context retrieval uses a lightweight in-memory semantic cache. The cache reuses non-diagnostic professional references, similar cases, and context summaries for semantically similar symptom queries. It does not cache final `UserResponse` status, risk band, guideline IDs, or escalation conditions.
+
+Run the local semantic-cache cost benchmark:
+
+```bash
+python -m pawcare.evaluation.cost_benchmark --report-json /tmp/pawcare_cost_benchmark.json
+```
+
+The benchmark reports cache hit rate, avoided retrieval/summarizer work, estimated context tokens saved, and latency. The token savings are deterministic estimates for engineering comparison, not production billing.
+
+---
+
+## CI Regression Checks
+
+GitHub Actions runs PawCare's regression gate on push and pull request:
+
+```bash
+python -m pip install -e ".[dev]"
+cd frontend && npm ci && npm run build
+cd ..
+pytest -q
+python -m pawcare.evaluation.golden_runner --report-json pawcare_eval_report.json
+```
+
+The CI workflow checks backend/API behavior, React build health, and Golden Dataset safety contracts. It uploads `pawcare_eval_report.json` as an artifact for inspecting risk triage, guideline grounding, retrieval relevance, API boundaries, safety constraints, and latency summary.
+
+This is CI only. PawCare does not auto-deploy from CI; CD should wait until there is a real staging or production environment, auth, secret management, and a database deployment strategy.
 
 ---
 

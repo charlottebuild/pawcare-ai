@@ -4,6 +4,7 @@ from typing import Protocol
 
 from pawcare.schemas.state import Observation
 from pawcare.services.pet_models import (
+    CareRoutine,
     DailyPetSummary,
     DogContextSnapshot,
     MonthlyPetSummary,
@@ -35,6 +36,12 @@ class PetRepository(Protocol):
         pet_id: str,
         observations: list[Observation],
     ) -> PetRecord: ...
+
+    def save_care_routines(
+        self, *, user_id: str, pet_id: str, routines: list[CareRoutine]
+    ) -> None: ...
+
+    def list_care_routines(self, *, user_id: str, pet_id: str) -> list[CareRoutine]: ...
 
     def save_daily_summaries(
         self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]
