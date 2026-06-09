@@ -101,6 +101,14 @@ python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3
 
 This offline command rebuilds daily, weekly, and monthly summaries from stored observations. It is intentionally manual in v1; a future cron job, FastAPI background task, or production queue can call the same worker once deployment infrastructure exists.
 
+Run a local monitoring scan for due routines and recent high-risk observations:
+
+```bash
+python -m pawcare.monitoring.monitoring_worker --db pawcare.local.sqlite3
+```
+
+The monitoring worker reads SQLite pet records, care routines, and recent observations. It can run once or in local watch mode, and it reports due routine reminders plus high-risk observation alerts. It is a local scheduled workflow, not a production daemon or hosted alert delivery system.
+
 Care-context retrieval uses a lightweight in-memory semantic cache. The cache reuses non-diagnostic professional references, similar cases, and context summaries for semantically similar symptom queries. It does not cache final `UserResponse` status, risk band, guideline IDs, or escalation conditions.
 
 Run the local semantic-cache cost benchmark:

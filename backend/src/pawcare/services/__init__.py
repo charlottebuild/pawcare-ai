@@ -44,8 +44,10 @@ from pawcare.services.llm_usage import (
 from pawcare.services.in_memory_pet_repository import InMemoryPetRepository
 from pawcare.services.pet_message_service import PetMessageService
 from pawcare.services.pet_models import (
+    CareRoutine,
     DailyPetSummary,
     DogContextSnapshot,
+    MonitoringAlert,
     MonthlyPetSummary,
     PetRecord,
     UserAccount,
@@ -73,6 +75,7 @@ __all__ = [
     "BehaviorCareReference",
     "BehaviorReferenceMatch",
     "BehaviorReferenceService",
+    "CareRoutine",
     "CommunityCase",
     "DailyPetSummary",
     "DogContextSnapshot",
@@ -88,6 +91,7 @@ __all__ = [
     "LocalKnowledgeIndex",
     "LogProcessingResult",
     "LogProcessingService",
+    "MonitoringAlert",
     "MonthlyPetSummary",
     "OpenAIKnowledgeSummarizer",
     "PetMessageService",

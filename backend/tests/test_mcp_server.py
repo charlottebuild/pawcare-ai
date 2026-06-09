@@ -144,8 +144,8 @@ def test_run_golden_eval_returns_lightweight_summary() -> None:
     payload = mcp_server.run_golden_eval(layer="all")
 
     assert payload["summary"]["passed"] is True
-    assert payload["summary"]["total_count"] >= 40
+    assert payload["summary"]["total_count"] >= 50
     assert "risk_classification" in payload["metric_scores"]
-    assert payload["latency_summary"]["case_count"] >= 40
+    assert payload["latency_summary"]["case_count"] >= 50
     assert "quality_summary" in payload
     assert "case_results" not in payload

@@ -98,30 +98,10 @@ retrieval, care-context, or safety behavior changes.
 The Golden Data Set is contract-based rather than word-for-word. Each scenario
 stores a realistic user message, pet profile, target layer, category, priority,
 metrics, and expected safety/product contract. The runner checks risk
-classification, guideline grounding, forbidden diagnostic or medication wording,
-care-context retrieval, and API privacy boundaries. This lets the project
-measure drift without making every response sentence brittle.
-
-Interview summary:
-
-> I built a contract-based Golden Dataset for PawCare instead of relying on
-> manual testing. Each case contains a realistic user message, pet profile,
-> target layer, and expected safety contract. I do not require exact wording
-> because AI responses can change, but I check the important guarantees: risk
-> level, guideline grounding, forbidden diagnostic language, care-context
-> retrieval, and API privacy boundaries.
->
-> The dataset is grouped by category, such as health triage, condition triage,
-> behavior safety, normal updates, and care-context retrieval. The runner
-> replays cases through both the core service layer and the FastAPI product
-> layer, then reports pass rates by category and metric. This lets me detect
-> drift when I change agents, retrieval, prompts, or symptom parsing.
->
-> For example, cases like "cat didn't pee all day," "poo blood," "eye injury,"
-> or "could it be salivary mucocele" must trigger the right urgency and
-> references, while normal updates like "ate breakfast normally" must not
-> over-trigger scary care cards. So the golden set protects both safety and
-> user experience.
+classification, agent routing, guideline grounding, forbidden diagnostic or
+medication wording, care-context retrieval, and API privacy boundaries. This lets
+the project measure behavioral drift without making every response sentence
+brittle.
 
 Evaluation observability:
 
@@ -145,19 +125,6 @@ Evaluation observability:
   band, guideline IDs, or escalation conditions. Unsafe polish output falls back
   to the deterministic response.
 
-Interview summary:
-
-> I evaluate AI behavior with both quality contracts and operational telemetry.
-> The Golden Dataset checks semantic contracts like risk triage, guideline
-> grounding, forbidden diagnostic language, retrieval relevance, and API
-> boundaries. Then the eval runner records latency and optional LLM usage, so I
-> can detect both behavioral regressions and cost or performance regressions
-> after prompt, retrieval, or agent changes. I am careful not to call this a
-> full human-labeled hallucination benchmark or true TTFT measurement until the
-> app has token-level streaming instrumentation. For now, PawCare streams safe
-> workflow status events and sends final medical guidance only after safety
-> review.
-
 MCP sidecar:
 
 - `pawcare.mcp_server` exposes PawCare capabilities as local MCP tools for
@@ -172,17 +139,6 @@ MCP sidecar:
 - Product traffic still flows through FastAPI and `PetMessageService`; MCP is a
   structured tool interface beside the product API, not a replacement.
 
-Interview summary:
-
-> I added a local MCP sidecar so PawCare's stable safety and retrieval
-> capabilities can be called by external AI clients as structured tools. The
-> tools are registered through an explicit allowlist with permission metadata,
-> not dynamic discovery. They are intentionally read-only: they can screen
-> abnormal signals, retrieve non-diagnostic care context, preview the safe
-> response chain, and run the Golden Dataset, but they cannot mutate user pet
-> records or bypass the Coordinator/Safety workflow. This gives the project
-> MCP-style extensibility while preserving deterministic safety boundaries.
-
 Long-term memory maintenance:
 
 - `python -m pawcare.memory.summary_worker --db pawcare.local.sqlite3` rebuilds
@@ -193,14 +149,16 @@ Long-term memory maintenance:
   background tasks, or production queues should reuse the same rebuild function
   rather than duplicating summary logic.
 
-Interview summary:
+Local scheduled monitoring:
 
-> PawCare has the summary worker logic implemented as an offline rebuild
-> command. I chose this before adding a production scheduler because the current
-> app is SQLite-backed and local-first. The important part is that raw
-> observations can be compressed into daily, weekly, and monthly pet memory
-> summaries; production scheduling is a deployment concern that can be added
-> later with cron or a queue once the infrastructure exists.
+- `python -m pawcare.monitoring.monitoring_worker --db pawcare.local.sqlite3`
+  scans SQLite pet records for due care routines and recent high-risk
+  observations.
+- The worker supports one-shot scans, optional user/pet filters, JSON reports,
+  and local watch mode.
+- Monitoring alerts are local workflow outputs. They do not replace the
+  Coordinator/Safety workflow and are not production push notifications.
+- Benchmark tests assert seeded local scans complete under 2 seconds.
 
 Semantic care-context cache:
 
@@ -212,15 +170,6 @@ Semantic care-context cache:
   risk band, guideline IDs, escalation conditions, or user-facing final
   medical guidance.
 
-Interview summary:
-
-> I use semantic caching for retrieval context, not final medical decisions.
-> Similar symptom queries like "poo blood" and "bloody stool" can reuse the same
-> professional references, similar cases, and context summary, which avoids
-> repeating retrieval and summarization work. But the final response still runs
-> through the current pet state, Coordinator, and SafetyAgent, so cached context
-> cannot replace triage or escalation logic.
-
 Cost benchmark:
 
 - `python -m pawcare.evaluation.cost_benchmark` runs a local semantic-cache
@@ -229,15 +178,6 @@ Cost benchmark:
   summarizer calls, estimated context tokens saved, and latency.
 - Token savings are deterministic estimates for comparison, not OpenAI billing
   data.
-
-Interview summary:
-
-> I do not just assume semantic caching saves money. I benchmark it. The local
-> cost runner replays repeated symptom questions, measures cache hits and
-> misses, estimates avoided retrieval/summarization payload tokens, and reports
-> latency. This lets me discuss cost optimization with concrete engineering
-> telemetry while being honest that v1 estimates context-token savings rather
-> than real provider billing.
 
 ---
 

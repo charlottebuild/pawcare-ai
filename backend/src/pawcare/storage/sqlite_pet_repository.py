@@ -12,6 +12,7 @@ from pawcare.schemas.state import (
     Observation,
 )
 from pawcare.services.pet_models import (
+    CareRoutine,
     DailyPetSummary,
     DogContextSnapshot,
     MonthlyPetSummary,
@@ -164,6 +165,38 @@ class SQLitePetRepository:
                 )
         return self.get_pet(user_id=user_id, pet_id=pet_id)
 
+    def save_care_routines(
+        self, *, user_id: str, pet_id: str, routines: list[CareRoutine]
+    ) -> None:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            connection.execute(
+                "delete from care_routines where user_id = ? and pet_id = ?",
+                (user_id, pet_id),
+            )
+            for routine in routines:
+                connection.execute(
+                    """
+                    insert into care_routines (
+                        user_id, pet_id, routine_id, routine_json
+                    ) values (?, ?, ?, ?)
+                    """,
+                    (user_id, pet_id, routine.routine_id, self._to_json(routine.__dict__)),
+                )
+
+    def list_care_routines(self, *, user_id: str, pet_id: str) -> list[CareRoutine]:
+        self.get_pet(user_id=user_id, pet_id=pet_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                select routine_json from care_routines
+                where user_id = ? and pet_id = ?
+                order by rowid
+                """,
+                (user_id, pet_id),
+            ).fetchall()
+        return [CareRoutine(**json.loads(str(row["routine_json"]))) for row in rows]
+
     def save_daily_summaries(
         self, *, user_id: str, pet_id: str, summaries: list[DailyPetSummary]
     ) -> None:
@@ -309,6 +342,15 @@ class SQLitePetRepository:
                     user_id text not null,
                     pet_id text not null,
                     observation_json text not null,
+                    foreign key (user_id, pet_id) references pets(user_id, pet_id)
+                );
+
+                create table if not exists care_routines (
+                    user_id text not null,
+                    pet_id text not null,
+                    routine_id text not null,
+                    routine_json text not null,
+                    primary key (user_id, pet_id, routine_id),
                     foreign key (user_id, pet_id) references pets(user_id, pet_id)
                 );
 
