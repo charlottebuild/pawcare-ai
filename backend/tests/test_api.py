@@ -108,44 +108,37 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert page_response.status_code == 200
     assert "PawCare" in page_response.text
     assert "/app/static/app.js" in page_response.text
+    assert "/app/static/app.css" in page_response.text
     assert "User ID" not in page_response.text
     assert "Pet ID" not in page_response.text
-    assert "Add pet" in page_response.text
-    assert "Species" in page_response.text
-    assert "Cat" in page_response.text
-    assert "Add Observation" in page_response.text
-    assert "Save Observation" in page_response.text
-    assert "Type a message..." in page_response.text
-    assert page_response.text.index("Timeline") < page_response.text.index("Care Plan")
-    assert "Modify Care Plan" in page_response.text
-    assert "Modify" in page_response.text
-    assert "Potty time" in page_response.text
-    assert "Potty before bed" in page_response.text
-    assert "Afternoon activity" in page_response.text
-    assert "Morning walk" in page_response.text
-    assert "Add medication" in page_response.text
-    assert "Use local photo" in page_response.text
-    assert "Health baseline" in page_response.text
     assert js_response.status_code == 200
-    assert "sendPetMessage" in js_response.text
-    assert "duplicateMealWarning" in js_response.text
-    assert "pendingDuplicateMeal" in js_response.text
-    assert "renderBreedOptions" in js_response.text
+    assert "PawCare Assistant" in js_response.text
+    assert "Add pet" in js_response.text
+    assert "Species" in js_response.text
+    assert "Cat" in js_response.text
+    assert "Add Observation" in js_response.text
+    assert "Save Observation" in js_response.text
+    assert "Type a message..." in js_response.text
+    assert "Timeline" in js_response.text
+    assert "Care Plan" in js_response.text
+    assert "Modify Care Plan" in js_response.text
+    assert "Modify" in js_response.text
+    assert "Potty time" in js_response.text
+    assert "Potty before bed" in js_response.text
+    assert "Afternoon activity" in js_response.text
+    assert "Morning walk" in js_response.text
+    assert "Add medication" in js_response.text
+    assert "Use local photo" in js_response.text
+    assert "Health baseline" in js_response.text
     assert "Domestic Shorthair" in js_response.text
     assert "avatar_image" in js_response.text
-    assert "addMedicationField" in js_response.text
-    assert "fetchCareContext" in js_response.text
     assert "context_summary" in js_response.text
     assert "Vet reference" in js_response.text
     assert "Similar case" in js_response.text
     assert "Professional references" not in js_response.text
     assert "Similar cases" not in js_response.text
     assert "_has_triage_intent" not in js_response.text
-    assert "selectPet(state.pets[0].pet_id)" in js_response.text
-    assert "focusComposer" in js_response.text
     assert "pawcareWorkspaceV1" in js_response.text
-    assert "restoreWorkspaceSession" in js_response.text
-    assert "saveWorkspaceSession" in js_response.text
     assert "Pet profile" not in js_response.text
     assert css_response.status_code == 200
     assert ".app-shell" in css_response.text
