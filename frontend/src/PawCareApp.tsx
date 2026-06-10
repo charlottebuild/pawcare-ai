@@ -1258,7 +1258,8 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 function CareContextCards({ careContext }: { careContext: CareContext | null }) {
   const references = careContext?.professional_references || [];
   const relatedCases = careContext?.related_cases || [];
-  if (!careContext?.context_summary && !references.length && !relatedCases.length) return null;
+  const screeningChecklist = careContext?.screening_checklist || null;
+  if (!careContext?.context_summary && !screeningChecklist && !references.length && !relatedCases.length) return null;
   return (
     <section className="related-cases" aria-label="Care context">
       <div className="related-cases-header">
@@ -1267,6 +1268,7 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
       </div>
       {careContext?.non_diagnostic_notice && <p className="case-disclaimer">{careContext.non_diagnostic_notice}</p>}
       {careContext?.context_summary && <p className="context-summary">{careContext.context_summary}</p>}
+      {screeningChecklist && <ScreeningChecklistCard checklist={screeningChecklist} />}
       <div className="case-card-list">
         {references.map((item, index) => (
           <article key={`ref-${index}`} className="case-card professional-reference-card">
@@ -1292,6 +1294,38 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
         ))}
       </div>
     </section>
+  );
+}
+
+function ScreeningChecklistCard({ checklist }: { checklist: NonNullable<CareContext["screening_checklist"]> }) {
+  return (
+    <article className="case-card screening-checklist-card">
+      <div className="case-card-topline">
+        <span>Screening checklist</span>
+        <span>{labelForCategory(checklist.possible_domain || "review")}</span>
+      </div>
+      {checklist.non_diagnostic_notice && <p>{checklist.non_diagnostic_notice}</p>}
+      {checklist.symptom_checklist?.length ? (
+        <ChecklistSection title="Check whether you see" items={checklist.symptom_checklist} />
+      ) : null}
+      {checklist.questions_to_ask_user?.length ? (
+        <ChecklistSection title="Questions to answer" items={checklist.questions_to_ask_user} />
+      ) : null}
+      {checklist.safe_next_steps?.length ? (
+        <ChecklistSection title="Safe next steps" items={checklist.safe_next_steps} />
+      ) : null}
+    </article>
+  );
+}
+
+function ChecklistSection({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="checklist-section">
+      <strong>{title}</strong>
+      <ul>
+        {items.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
   );
 }
 

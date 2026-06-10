@@ -134,6 +134,7 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "Domestic Shorthair" in js_response.text
     assert "avatar_image" in js_response.text
     assert "context_summary" in js_response.text
+    assert "Screening checklist" in js_response.text
     assert "Vet reference" in js_response.text
     assert "Similar case" in js_response.text
     assert "Professional references" not in js_response.text
@@ -541,9 +542,14 @@ def test_care_context_endpoint_returns_professional_references_and_cases() -> No
     body = response.json()
     reference = body["professional_references"][0]
     case = body["related_cases"][0]
+    checklist = body["screening_checklist"]
     assert response.status_code == 200
     assert "not a diagnosis" in body["non_diagnostic_notice"].lower()
     assert "not a diagnosis" in body["context_summary"].lower()
+    assert checklist["possible_domain"] == "oral_neck"
+    assert "trouble eating, chewing, or swallowing" in checklist["symptom_checklist"]
+    assert checklist["questions_to_ask_user"]
+    assert checklist["safe_next_steps"]
     assert reference["domain"] == "oral_neck"
     assert reference["source_url"].startswith("https://")
     assert reference["what_to_record"]
@@ -692,6 +698,7 @@ def test_care_context_plain_update_returns_empty_context() -> None:
 
     assert response.status_code == 200
     assert response.json()["context_summary"] == ""
+    assert response.json()["screening_checklist"] is None
     assert response.json()["professional_references"] == []
     assert response.json()["related_cases"] == []
     assert response.json()["cache_status"] == "miss"

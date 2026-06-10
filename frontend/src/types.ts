@@ -59,9 +59,19 @@ export type UserResponse = {
 export type CareContext = {
   non_diagnostic_notice?: string;
   context_summary?: string;
+  screening_checklist?: ScreeningChecklist | null;
   professional_references?: ProfessionalReference[];
   related_cases?: RelatedCase[];
   cache_status?: string;
+};
+
+export type ScreeningChecklist = {
+  source?: string;
+  non_diagnostic_notice?: string;
+  possible_domain?: string;
+  symptom_checklist?: string[];
+  questions_to_ask_user?: string[];
+  safe_next_steps?: string[];
 };
 
 export type ProfessionalReference = {

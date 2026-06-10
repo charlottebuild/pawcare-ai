@@ -43,6 +43,9 @@ def test_openai_llm_signal_screening_parses_structured_json() -> None:
               "matched_phrases": ["moving strangely"],
               "suggested_canonical_terms": ["mobility_change"],
               "suggested_guideline_ids": ["GL_LAMENESS_001"],
+              "symptom_checklist": ["weight bearing", "pain signs"],
+              "questions_to_ask_user": ["Which leg is affected?"],
+              "safe_next_steps": ["Record a short video for the vet."],
               "confidence": 0.72,
               "reasoning_summary": "Movement concern should be reviewed."
             }
@@ -58,6 +61,9 @@ def test_openai_llm_signal_screening_parses_structured_json() -> None:
 
     assert result.possible_domains == ["health", "mobility"]
     assert result.suggested_guideline_ids == ["GL_LAMENESS_001"]
+    assert result.symptom_checklist == ["weight bearing", "pain signs"]
+    assert result.questions_to_ask_user == ["Which leg is affected?"]
+    assert result.safe_next_steps == ["Record a short video for the vet."]
     assert result.confidence == 0.72
     assert "Movement concern" in result.reasoning_summary
 

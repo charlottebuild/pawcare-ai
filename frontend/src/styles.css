@@ -979,6 +979,24 @@ a {
   border-color: #cfe5ff;
 }
 
+.screening-checklist-card {
+  background: #fffdf7;
+  border-color: #f4d59b;
+}
+
+.checklist-section {
+  display: grid;
+  gap: 4px;
+}
+
+.checklist-section ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
 .case-card-topline {
   display: flex;
   justify-content: space-between;
