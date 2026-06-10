@@ -145,6 +145,7 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "Similar cases" not in js_response.text
     assert "_has_triage_intent" not in js_response.text
     assert "pawcareWorkspaceV1" in js_response.text
+    assert "pawcareChatHistoryV1" in js_response.text
     assert "Pet profile" not in js_response.text
     assert css_response.status_code == 200
     assert ".app-shell" in css_response.text

@@ -12,6 +12,7 @@ import type {
 } from "./types";
 
 const workspaceStorageKey = "pawcareWorkspaceV1";
+const chatStoragePrefix = "pawcareChatHistoryV1";
 
 const dogBreeds = [
   ["", "Unknown / mixed"],
@@ -131,6 +132,7 @@ export function PawCareApp() {
   const [careDraft, setCareDraft] = useState<CarePlan>(defaultCarePlan());
   const [isSending, setIsSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const chatHydratedUserRef = useRef("");
 
   const selectedPet = pets.find((pet) => pet.pet_id === selectedPetId) || null;
   const currentChat = chatByPetId[selectedPetId || "_system"] || [
@@ -159,6 +161,17 @@ export function PawCareApp() {
       selected_pet_id: selectedPetId,
     });
   }, [userId, displayName, selectedPetId]);
+
+  useEffect(() => {
+    if (!userId || chatHydratedUserRef.current === userId) return;
+    setChatByPetId(restoreChatHistory(userId));
+    chatHydratedUserRef.current = userId;
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId || chatHydratedUserRef.current !== userId) return;
+    saveChatHistory(userId, chatByPetId);
+  }, [userId, chatByPetId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -218,7 +231,8 @@ export function PawCareApp() {
     setSelectedPetId("");
     setSelectedPetDetail(null);
     setObservations([]);
-    setChatByPetId({});
+    setChatByPetId(restoreChatHistory(user.user_id));
+    chatHydratedUserRef.current = user.user_id;
     setCarePlanByPetId({});
     await loadPets(user.user_id, "");
   }
@@ -1634,6 +1648,48 @@ function restoreSession(): { user_id?: string; display_name?: string; selected_p
 
 function saveSession(payload: { user_id: string; display_name: string; selected_pet_id: string }) {
   localStorage.setItem(workspaceStorageKey, JSON.stringify(payload));
+}
+
+function restoreChatHistory(userId: string): Record<string, ChatMessage[]> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(chatStorageKey(userId)) || "{}");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const restored: Record<string, ChatMessage[]> = {};
+    for (const [petId, messages] of Object.entries(parsed)) {
+      if (!Array.isArray(messages)) continue;
+      const safeMessages = messages.filter(isStoredChatMessage).slice(-80);
+      if (safeMessages.length) restored[petId] = safeMessages;
+    }
+    return restored;
+  } catch {
+    return {};
+  }
+}
+
+function saveChatHistory(userId: string, chatByPetId: Record<string, ChatMessage[]>) {
+  const payload: Record<string, ChatMessage[]> = {};
+  for (const [petId, messages] of Object.entries(chatByPetId)) {
+    const safeMessages = messages.filter(isStoredChatMessage).slice(-80);
+    if (safeMessages.length) payload[petId] = safeMessages;
+  }
+  localStorage.setItem(chatStorageKey(userId), JSON.stringify(payload));
+}
+
+function chatStorageKey(userId: string) {
+  return `${chatStoragePrefix}:${userId}`;
+}
+
+function isStoredChatMessage(value: unknown): value is ChatMessage {
+  if (!value || typeof value !== "object") return false;
+  const message = value as Partial<ChatMessage>;
+  return (
+    typeof message.id === "string" &&
+    (message.role === "assistant" || message.role === "user") &&
+    typeof message.message === "string" &&
+    (!message.status || typeof message.status === "string") &&
+    (!message.meta || Array.isArray(message.meta)) &&
+    (!message.careContext || typeof message.careContext === "object")
+  );
 }
 
 function speciesLabel(species?: string | null) {
