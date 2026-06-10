@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CareContext,
   CarePlan,
@@ -77,6 +77,9 @@ type PetFormState = {
   species: string;
   avatar: string;
   avatarImage: string;
+  avatarZoom: string;
+  avatarX: string;
+  avatarY: string;
   breed: string;
   ageYears: string;
   weightKg: string;
@@ -91,6 +94,9 @@ const blankPetForm: PetFormState = {
   species: "dog",
   avatar: "collie",
   avatarImage: "",
+  avatarZoom: "1",
+  avatarX: "50",
+  avatarY: "50",
   breed: "",
   ageYears: "",
   weightKg: "",
@@ -235,24 +241,35 @@ export function PawCareApp() {
       petFormMode === "edit"
         ? `/v1/users/${encodeURIComponent(userId)}/pets/${encodeURIComponent(targetPetId)}`
         : `/v1/users/${encodeURIComponent(userId)}/pets`;
+    const savedPetForm = {
+      ...petForm,
+      ...(petForm.avatarImage
+        ? {
+            avatarImage: await cropAvatarImage(petForm),
+            avatarZoom: "1",
+            avatarX: "50",
+            avatarY: "50",
+          }
+        : {}),
+    };
     await api(path, {
       method: petFormMode === "edit" ? "PATCH" : "POST",
       body: {
         dog_profile: {
           id: targetPetId,
-          species: petForm.species || "dog",
-          name: petForm.name.trim(),
-          breed: petForm.breed || null,
-          age_years: petForm.ageYears ? Number(petForm.ageYears) : null,
-          weight_kg: petForm.weightKg ? Number(petForm.weightKg) : null,
-          care_notes: avatarCareNotes(petForm),
+          species: savedPetForm.species || "dog",
+          name: savedPetForm.name.trim(),
+          breed: savedPetForm.breed || null,
+          age_years: savedPetForm.ageYears ? Number(savedPetForm.ageYears) : null,
+          weight_kg: savedPetForm.weightKg ? Number(savedPetForm.weightKg) : null,
+          care_notes: avatarCareNotes(savedPetForm),
         },
         behavioral_baseline: {},
         health_baseline: {
-          normal_appetite: petForm.normalAppetite || "unknown",
-          normal_stool_quality: petForm.normalStool || "unknown",
-          normal_activity_level: petForm.normalActivity || "unknown",
-          known_medical_notes: petForm.medicalNotes
+          normal_appetite: savedPetForm.normalAppetite || "unknown",
+          normal_stool_quality: savedPetForm.normalStool || "unknown",
+          normal_activity_level: savedPetForm.normalActivity || "unknown",
+          known_medical_notes: savedPetForm.medicalNotes
             .split("\n")
             .map((line) => line.trim())
             .filter(Boolean),
@@ -734,8 +751,42 @@ function PetProfileForm({
   onClose: () => void;
 }) {
   const breeds = value.species === "cat" ? catBreeds : dogBreeds;
+  const avatarDragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    avatarX: number;
+    avatarY: number;
+  } | null>(null);
   function patch(update: Partial<PetFormState>) {
     onChange({ ...value, ...update });
+  }
+  function startAvatarDrag(event: PointerEvent<HTMLDivElement>) {
+    if (!value.avatarImage) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    avatarDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      avatarX: Number(value.avatarX) || 50,
+      avatarY: Number(value.avatarY) || 50,
+    };
+  }
+  function moveAvatarDrag(event: PointerEvent<HTMLDivElement>) {
+    const drag = avatarDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    const zoom = Number(value.avatarZoom) || 1;
+    const sensitivity = 0.7 / zoom;
+    patch({
+      avatarX: String(Math.round(clamp(drag.avatarX + (event.clientX - drag.startX) * sensitivity, 0, 100))),
+      avatarY: String(Math.round(clamp(drag.avatarY + (event.clientY - drag.startY) * sensitivity, 0, 100))),
+    });
+  }
+  function stopAvatarDrag(event: PointerEvent<HTMLDivElement>) {
+    const drag = avatarDragRef.current;
+    if (drag?.pointerId === event.pointerId) {
+      avatarDragRef.current = null;
+    }
   }
   return (
     <section className="profile-card">
@@ -768,31 +819,74 @@ function PetProfileForm({
               </label>
             ))}
           </div>
-          <label className="avatar-upload">
-            Use local photo
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (!file) {
-                  patch({ avatarImage: "" });
-                  return;
-                }
-                const reader = new FileReader();
-                reader.addEventListener("load", () =>
-                  patch({ avatarImage: String(reader.result || "") }),
-                );
-                reader.readAsDataURL(file);
-              }}
-            />
-            <span
-              className="avatar-image-preview"
-              style={value.avatarImage ? { backgroundImage: `url("${value.avatarImage}")` } : undefined}
+          <div className="avatar-upload">
+            <label>
+              Use local photo
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) {
+                    patch({ avatarImage: "" });
+                    return;
+                  }
+                  const reader = new FileReader();
+                  reader.addEventListener("load", () =>
+                    patch({
+                      avatarImage: String(reader.result || ""),
+                      avatarZoom: "1.15",
+                      avatarX: "50",
+                      avatarY: "50",
+                    }),
+                  );
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
+            <div
+              className={`avatar-image-preview ${value.avatarImage ? "draggable" : ""}`}
+              onPointerDown={startAvatarDrag}
+              onPointerMove={moveAvatarDrag}
+              onPointerUp={stopAvatarDrag}
+              onPointerCancel={stopAvatarDrag}
             >
-              {value.avatarImage ? "" : "No photo selected"}
-            </span>
-          </label>
+              {value.avatarImage ? (
+                <>
+                  <AvatarPhoto
+                    src={value.avatarImage}
+                    zoom={Number(value.avatarZoom)}
+                    x={Number(value.avatarX)}
+                    y={Number(value.avatarY)}
+                  />
+                  <span>Drag to reposition</span>
+                </>
+              ) : "No photo selected"}
+            </div>
+            {value.avatarImage && (
+              <div className="avatar-crop-controls">
+                <label>
+                  Zoom
+                  <input
+                    type="range"
+                    min="1"
+                    max="2.4"
+                    step="0.05"
+                    value={value.avatarZoom}
+                    onChange={(event) => patch({ avatarZoom: event.target.value })}
+                  />
+                </label>
+                <p className="avatar-crop-hint">Drag the photo inside the frame to choose the avatar area.</p>
+                <button
+                  className="secondary-button small-action"
+                  type="button"
+                  onClick={() => patch({ avatarImage: "", avatarZoom: "1", avatarX: "50", avatarY: "50" })}
+                >
+                  Remove photo
+                </button>
+              </div>
+            )}
+          </div>
         </fieldset>
         <div className="field-row">
           <label>
@@ -1164,7 +1258,12 @@ function ChatBubble({ message }: { message: ChatMessage }) {
 function CareContextCards({ careContext }: { careContext: CareContext | null }) {
   const references = careContext?.professional_references || [];
   const relatedCases = careContext?.related_cases || [];
-  if (!careContext?.context_summary && !references.length && !relatedCases.length) return null;
+  const screeningChecklist = careContext?.screening_checklist || null;
+  const [expanded, setExpanded] = useState(false);
+  const visibleReferences = expanded ? references : references.slice(0, 1);
+  const visibleRelatedCases = expanded ? relatedCases : relatedCases.slice(0, 1);
+  const hiddenCardCount = references.length + relatedCases.length - visibleReferences.length - visibleRelatedCases.length;
+  if (!careContext?.context_summary && !screeningChecklist && !references.length && !relatedCases.length) return null;
   return (
     <section className="related-cases" aria-label="Care context">
       <div className="related-cases-header">
@@ -1172,9 +1271,10 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
         <span>Not a diagnosis</span>
       </div>
       {careContext?.non_diagnostic_notice && <p className="case-disclaimer">{careContext.non_diagnostic_notice}</p>}
+      {screeningChecklist && <ScreeningChecklistCard checklist={screeningChecklist} />}
       {careContext?.context_summary && <p className="context-summary">{careContext.context_summary}</p>}
       <div className="case-card-list">
-        {references.map((item, index) => (
+        {visibleReferences.map((item, index) => (
           <article key={`ref-${index}`} className="case-card professional-reference-card">
             <div className="case-card-topline"><span>Vet reference</span><span>{item.relevance_level || "related"}</span></div>
             <h4>{item.source_name || "Professional reference"}</h4>
@@ -1185,7 +1285,7 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
             <SafeLink href={item.source_url} label="Open reference" />
           </article>
         ))}
-        {relatedCases.map((item, index) => (
+        {visibleRelatedCases.map((item, index) => (
           <article key={`case-${index}`} className="case-card">
             <div className="case-card-topline"><span>Similar case</span><span>{item.condition_discussion_priority || "discussion topic"}</span></div>
             <h4>{item.title || "Related pet case"}</h4>
@@ -1197,7 +1297,48 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
           </article>
         ))}
       </div>
+      {hiddenCardCount > 0 && (
+        <button className="secondary-button small-action view-more-context" type="button" onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : `View ${hiddenCardCount} more ${hiddenCardCount === 1 ? "card" : "cards"}`}
+        </button>
+      )}
     </section>
+  );
+}
+
+function ScreeningChecklistCard({ checklist }: { checklist: NonNullable<CareContext["screening_checklist"]> }) {
+  return (
+    <article className="case-card screening-checklist-card">
+      <div className="case-card-topline">
+        <span>Screening checklist</span>
+        <span>{screeningSourceLabel(checklist.source)} · {labelForCategory(checklist.possible_domain || "review")}</span>
+      </div>
+      {checklist.non_diagnostic_notice && <p>{checklist.non_diagnostic_notice}</p>}
+      {checklist.symptom_checklist?.length ? (
+        <ChecklistSection title="Check whether you see" items={checklist.symptom_checklist} />
+      ) : null}
+      {checklist.questions_to_ask_user?.length ? (
+        <ChecklistSection title="Questions to answer" items={checklist.questions_to_ask_user} />
+      ) : null}
+      {checklist.safe_next_steps?.length ? (
+        <ChecklistSection title="Safe next steps" items={checklist.safe_next_steps} />
+      ) : null}
+    </article>
+  );
+}
+
+function screeningSourceLabel(source?: string) {
+  return source === "llm_screening" ? "AI screening" : "Rule-based screening";
+}
+
+function ChecklistSection({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="checklist-section">
+      <strong>{title}</strong>
+      <ul>
+        {items.slice(0, 6).map((item) => <li key={item}>{item}</li>)}
+      </ul>
+    </div>
   );
 }
 
@@ -1239,8 +1380,28 @@ function PetAvatar({ pet, variant = "card" }: { pet: PetSummary; variant?: "card
   return (
     <span
       className={`${className} ${pet.avatar_image ? "has-image" : ""}`}
-      style={pet.avatar_image ? { backgroundImage: `url("${pet.avatar_image}")` } : undefined}
       aria-hidden="true"
+    >
+      {pet.avatar_image && (
+        <AvatarPhoto
+          src={pet.avatar_image}
+          zoom={pet.avatar_zoom || 1}
+          x={pet.avatar_x || 50}
+          y={pet.avatar_y || 50}
+        />
+      )}
+    </span>
+  );
+}
+
+function AvatarPhoto({ src, zoom = 1, x = 50, y = 50 }: { src: string; zoom?: number | null; x?: number | null; y?: number | null }) {
+  return (
+    <img
+      className="avatar-photo"
+      src={src}
+      alt=""
+      draggable={false}
+      style={avatarImageStyle({ avatar_zoom: zoom, avatar_x: x, avatar_y: y })}
     />
   );
 }
@@ -1357,6 +1518,9 @@ function petFormFromDetail(detail: PetDetail): PetFormState {
     species: detail.dog_profile.species || "dog",
     avatar: avatarFromCareNotes(detail.dog_profile.care_notes),
     avatarImage: avatarImageFromCareNotes(detail.dog_profile.care_notes),
+    avatarZoom: avatarNumberFromCareNotes(detail.dog_profile.care_notes, "avatar_zoom", "1"),
+    avatarX: avatarNumberFromCareNotes(detail.dog_profile.care_notes, "avatar_x", "50"),
+    avatarY: avatarNumberFromCareNotes(detail.dog_profile.care_notes, "avatar_y", "50"),
     breed: detail.dog_profile.breed || "",
     ageYears: detail.dog_profile.age_years ? String(detail.dog_profile.age_years) : "",
     weightKg: detail.dog_profile.weight_kg ? String(detail.dog_profile.weight_kg) : "",
@@ -1369,7 +1533,12 @@ function petFormFromDetail(detail: PetDetail): PetFormState {
 
 function avatarCareNotes(form: PetFormState) {
   const notes = [`avatar:${form.avatar || "collie"}`];
-  if (form.avatarImage) notes.push(`avatar_image:${form.avatarImage}`);
+  if (form.avatarImage) {
+    notes.push(`avatar_image:${form.avatarImage}`);
+    notes.push(`avatar_zoom:${form.avatarZoom || "1"}`);
+    notes.push(`avatar_x:${form.avatarX || "50"}`);
+    notes.push(`avatar_y:${form.avatarY || "50"}`);
+  }
   return notes;
 }
 
@@ -1379,6 +1548,68 @@ function avatarFromCareNotes(notes: string[] = []) {
 
 function avatarImageFromCareNotes(notes: string[] = []) {
   return notes.find((note) => note.startsWith("avatar_image:"))?.replace("avatar_image:", "") || "";
+}
+
+async function cropAvatarImage(form: PetFormState): Promise<string> {
+  if (!form.avatarImage) return "";
+  const image = await loadImage(form.avatarImage);
+  const size = 320;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return form.avatarImage;
+
+  const zoom = clamp(Number(form.avatarZoom) || 1, 1, 2.4);
+  const x = clamp(Number(form.avatarX) || 50, 0, 100);
+  const y = clamp(Number(form.avatarY) || 50, 0, 100);
+  const offsetX = ((x - 50) * 0.95 * size) / 100;
+  const offsetY = ((y - 50) * 0.95 * size) / 100;
+  const imageRatio = image.naturalWidth / image.naturalHeight;
+  const canvasRatio = 1;
+  const drawWidth = imageRatio > canvasRatio ? size * imageRatio : size;
+  const drawHeight = imageRatio > canvasRatio ? size : size / imageRatio;
+
+  context.save();
+  context.translate(size / 2, size / 2);
+  context.translate(offsetX, offsetY);
+  context.scale(zoom, zoom);
+  context.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+  context.restore();
+  return canvas.toDataURL("image/jpeg", 0.88);
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Unable to load avatar image."));
+    image.src = src;
+  });
+}
+
+function avatarNumberFromCareNotes(notes: string[] = [], key: string, fallback: string) {
+  const value = notes.find((note) => note.startsWith(`${key}:`))?.replace(`${key}:`, "");
+  return value && Number.isFinite(Number(value)) ? value : fallback;
+}
+
+function avatarImageStyle(pet: {
+  avatar_zoom?: number | null;
+  avatar_x?: number | null;
+  avatar_y?: number | null;
+}) {
+  const zoom = clamp(Number(pet.avatar_zoom) || 1, 1, 2.4);
+  const x = clamp(Number(pet.avatar_x) || 50, 0, 100);
+  const y = clamp(Number(pet.avatar_y) || 50, 0, 100);
+  const offsetX = (x - 50) * 0.95;
+  const offsetY = (y - 50) * 0.95;
+  return {
+    transform: `translate(${offsetX}%, ${offsetY}%) scale(${zoom})`,
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function assistantGreeting(pet: PetSummary | null): ChatMessage {

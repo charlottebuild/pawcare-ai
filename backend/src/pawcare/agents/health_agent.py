@@ -153,6 +153,10 @@ class HealthAgent:
                     signals.add("respiratory_distress")
                 if context.get("asked_condition"):
                     signals.add("asked_specific_condition")
+                if context.get("condition_concern_only"):
+                    signals.add("condition_concern_only")
+                if context.get("known_diagnosis_context"):
+                    signals.add("known_diagnosis_context")
         return signals
 
     def _guideline_ids_from_signals(self, signals: set[str]) -> list[str]:
@@ -219,7 +223,11 @@ class HealthAgent:
             return "high urinary triage concern", "possible urinary blockage red flags need urgent veterinary triage", 0.88
         if "rehab_exercise" in signals and "acl_surgery" in signals:
             return "moderate post-op rehab concern", "post-op rehabilitation difficulty or exercise reluctance", 0.8
+        if "known_diagnosis_context" in signals:
+            return "moderate known condition follow-up", "known veterinary diagnosis context; follow vet plan and monitor red flags", 0.78
         if "condition_oral_neck" in signals:
+            if "condition_concern_only" in signals:
+                return "moderate oral or neck condition discussion", "user asked about an oral or neck condition direction", 0.76
             return "moderate oral or neck condition triage concern", "oral or neck swelling needs veterinary evaluation", 0.8
         if "condition_gi" in signals:
             return "moderate GI condition triage concern", "possible GI condition discussion needed", 0.78

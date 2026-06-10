@@ -1,7 +1,3 @@
-from pawcare.services.log_processing_service import (
-    LogProcessingResult,
-    LogProcessingService,
-)
 from pawcare.services.case_models import (
     BehaviorCareReference,
     BehaviorReferenceMatch,
@@ -42,7 +38,6 @@ from pawcare.services.llm_usage import (
     summarize_usage,
 )
 from pawcare.services.in_memory_pet_repository import InMemoryPetRepository
-from pawcare.services.pet_message_service import PetMessageService
 from pawcare.services.pet_models import (
     CareRoutine,
     DailyPetSummary,
@@ -69,6 +64,24 @@ from pawcare.services.semantic_care_context_cache import (
 )
 from pawcare.services.similar_case_service import SimilarCaseService
 from pawcare.storage import SQLitePetRepository
+
+
+def __getattr__(name: str) -> object:
+    if name in {"LogProcessingResult", "LogProcessingService"}:
+        from pawcare.services.log_processing_service import (
+            LogProcessingResult,
+            LogProcessingService,
+        )
+
+        return {
+            "LogProcessingResult": LogProcessingResult,
+            "LogProcessingService": LogProcessingService,
+        }[name]
+    if name == "PetMessageService":
+        from pawcare.services.pet_message_service import PetMessageService
+
+        return PetMessageService
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 __all__ = [
     "CaseMatch",

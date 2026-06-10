@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import Any, Protocol
 
 from pawcare.services.llm_usage import LLMUsageCollector, extract_openai_usage_record
@@ -17,6 +17,9 @@ class LLMSignalScreeningResult:
     suggested_guideline_ids: list[str]
     confidence: float
     reasoning_summary: str
+    symptom_checklist: list[str] = field(default_factory=list)
+    questions_to_ask_user: list[str] = field(default_factory=list)
+    safe_next_steps: list[str] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         return not (
@@ -24,6 +27,9 @@ class LLMSignalScreeningResult:
             or self.matched_phrases
             or self.suggested_canonical_terms
             or self.suggested_guideline_ids
+            or self.symptom_checklist
+            or self.questions_to_ask_user
+            or self.safe_next_steps
         )
 
     def as_payload(self) -> dict[str, object]:
@@ -119,7 +125,8 @@ class OpenAILLMSignalScreeningService:
         return (
             "You are a conservative pet-care signal screening helper. "
             "Return only JSON with keys: possible_domains, matched_phrases, "
-            "suggested_canonical_terms, suggested_guideline_ids, confidence, reasoning_summary. "
+            "suggested_canonical_terms, suggested_guideline_ids, symptom_checklist, "
+            "questions_to_ask_user, safe_next_steps, confidence, reasoning_summary. "
             "Do not diagnose. Do not provide medication dosage or medication instructions. "
             "Do not say the pet is fine or that there is nothing to worry about. "
             "Only suggest signals that should be reviewed by the PawCare agent.\n\n"
@@ -141,6 +148,9 @@ class OpenAILLMSignalScreeningService:
             suggested_guideline_ids=self._safe_guideline_ids(
                 payload.get("suggested_guideline_ids")
             ),
+            symptom_checklist=self._string_list(payload.get("symptom_checklist")),
+            questions_to_ask_user=self._string_list(payload.get("questions_to_ask_user")),
+            safe_next_steps=self._string_list(payload.get("safe_next_steps")),
             confidence=self._confidence(payload.get("confidence")),
             reasoning_summary=self._safe_reasoning(payload.get("reasoning_summary")),
         )
@@ -194,6 +204,9 @@ def empty_llm_signal_screening_result() -> LLMSignalScreeningResult:
         matched_phrases=[],
         suggested_canonical_terms=[],
         suggested_guideline_ids=[],
+        symptom_checklist=[],
+        questions_to_ask_user=[],
+        safe_next_steps=[],
         confidence=0.0,
         reasoning_summary="",
     )

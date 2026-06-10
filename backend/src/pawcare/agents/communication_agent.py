@@ -81,6 +81,9 @@ class CommunicationAgent:
         risk_assessment: RiskAssessment,
         owner_preferences: OwnerContactPreferences | None,
     ) -> str:
+        if any("known veterinary diagnosis context" in factor for factor in risk_assessment.risk_factors):
+            return self._known_condition_followup_message(risk_assessment)
+
         if any(
             guideline_id.startswith("GL_CONDITION_")
             for guideline_id in risk_assessment.source_guideline_ids
@@ -156,6 +159,23 @@ class CommunicationAgent:
             f"Possible categories to discuss with a veterinarian: {', '.join(profile['possible'])}. "
             f"What to watch for: {profile['watch']}. "
             f"What to record before the visit: {', '.join(profile['record'])}. "
+            f"{escalation}"
+        )
+
+    def _known_condition_followup_message(self, risk_assessment: RiskAssessment) -> str:
+        profile = self._condition_profile(risk_assessment.source_guideline_ids)
+        escalation = (
+            "Contact the veterinarian promptly if "
+            + "; ".join(risk_assessment.escalation_conditions[:4])
+            + "."
+            if risk_assessment.escalation_conditions
+            else "Contact the veterinarian promptly if swelling grows quickly, pain increases, eating or swallowing changes, breathing changes, bleeding, low energy, or refusal to eat or drink appears."
+        )
+        return (
+            "I will treat this as a veterinarian-diagnosed condition already on the care plan, "
+            "not as a new app diagnosis. Follow the veterinarian's instructions, keep recording changes, "
+            f"and track: {', '.join(profile['record'])}. "
+            f"Watch for: {profile['watch']}. "
             f"{escalation}"
         )
 

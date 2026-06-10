@@ -451,8 +451,21 @@ def _care_context_payload(
     pet: PetRecord,
     summarizer: KnowledgeSummarizer,
 ) -> dict[str, Any]:
+    domain = _care_context_domain(
+        professional_payload=professional_payload,
+        raw_text=raw_text,
+    )
+    professional_payload = _prioritize_professional_payload(
+        professional_payload,
+        domain=domain,
+    )
+    case_payload = _prioritize_case_payload(
+        case_payload,
+        domain=domain,
+    )
+    summary_matches = professional_payload[:1] + case_payload[:1]
     context_summary = summarizer.summarize(
-        matches=professional_payload + case_payload,
+        matches=summary_matches,
         raw_text=raw_text,
         pet_context={
             "pet_id": pet.pet_id,
@@ -467,9 +480,206 @@ def _care_context_payload(
             "diagnosis. Discuss concerning signs with a veterinarian."
         ),
         "context_summary": context_summary,
+        "screening_checklist": _screening_checklist_payload(
+            professional_payload=professional_payload,
+            case_payload=case_payload,
+            raw_text=raw_text,
+            domain=domain,
+        ),
         "professional_references": professional_payload,
         "related_cases": case_payload,
     }
+
+
+def _screening_checklist_payload(
+    *,
+    professional_payload: list[dict[str, object]],
+    case_payload: list[dict[str, object]],
+    raw_text: str,
+    domain: str | None = None,
+) -> dict[str, object] | None:
+    if not professional_payload and not case_payload:
+        return None
+    domain = domain or _care_context_domain(professional_payload=professional_payload, raw_text=raw_text)
+    if domain is None:
+        return None
+    checklists = {
+        "oral_neck": {
+            "possible_domain": "oral_neck",
+            "symptom_checklist": [
+                "swelling under the jaw, chin, neck, mouth, or tongue",
+                "drooling or wet fur around the mouth",
+                "trouble eating, chewing, or swallowing",
+                "pain when the mouth or neck area is touched",
+                "rapid growth, bleeding, breathing changes, or low energy",
+            ],
+            "questions_to_ask_user": [
+                "Where exactly is the swelling or lump?",
+                "Is it soft, firm, movable, painful, or growing quickly?",
+                "Any drooling, head withdrawal while eating, swallowing changes, or breathing changes?",
+            ],
+            "safe_next_steps": [
+                "Record location, size, firmness, growth speed, photos, eating changes, and drooling.",
+                "Discuss these signs with a veterinarian; seek prompt care if breathing, swallowing, pain, bleeding, or rapid growth appears.",
+            ],
+        },
+        "gi": {
+            "possible_domain": "gi",
+            "symptom_checklist": [
+                "vomiting frequency",
+                "diarrhea, blood, or black/tarry stool",
+                "low appetite, low energy, dehydration signs, or medication exposure",
+            ],
+            "questions_to_ask_user": [
+                "How many times did vomiting or diarrhea happen?",
+                "Any blood, black/tarry stool, refusal to drink, or low energy?",
+            ],
+            "safe_next_steps": [
+                "Record stool quality, vomiting frequency, appetite, water intake, energy, medications, and possible exposures.",
+                "Contact a veterinarian promptly if blood, black stool, repeated vomiting, dehydration, or low energy appears.",
+            ],
+        },
+        "urinary": {
+            "possible_domain": "urinary",
+            "symptom_checklist": [
+                "straining with little or no urine",
+                "blood in urine",
+                "frequent litter box or potty trips",
+                "pain, vomiting, low energy, or not eating",
+            ],
+            "questions_to_ask_user": [
+                "Is urine actually passing, and how much?",
+                "Any blood, straining, pain, vomiting, or low energy?",
+            ],
+            "safe_next_steps": [
+                "Record frequency, amount, straining, blood, accidents, water intake, and whether urine passes.",
+                "Seek urgent veterinary care if the pet cannot urinate or repeatedly strains with little or no urine.",
+            ],
+        },
+        "mobility": {
+            "possible_domain": "mobility",
+            "symptom_checklist": [
+                "limping or not bearing weight",
+                "pain, swelling, sudden worsening, or post-op changes",
+                "reluctance during prescribed rehab exercises",
+            ],
+            "questions_to_ask_user": [
+                "Which limb is affected, and can the pet bear weight?",
+                "Any recent surgery, injury, swelling, pain, or sudden worsening?",
+            ],
+            "safe_next_steps": [
+                "Record affected limb, weight-bearing ability, pain signs, swelling, recent activity, and surgery context.",
+                "Follow the veterinarian's rehab plan and contact the surgical vet if mobility worsens or pain appears.",
+            ],
+        },
+        "skin_lump": {
+            "possible_domain": "skin_lump",
+            "symptom_checklist": [
+                "new lump, bump, swelling, redness, discharge, bleeding, or itching",
+                "rapid growth, pain, warmth, or behavior change",
+            ],
+            "questions_to_ask_user": [
+                "Where is the lump and how large is it?",
+                "Is it changing quickly, painful, bleeding, discharging, or itchy?",
+            ],
+            "safe_next_steps": [
+                "Record size, location, color, texture, photos, itchiness, pain, discharge, and growth speed.",
+                "Discuss changes with a veterinarian, especially if rapid growth, bleeding, discharge, or pain appears.",
+            ],
+        },
+        "respiratory": {
+            "possible_domain": "respiratory",
+            "symptom_checklist": [
+                "breathing effort, coughing, wheezing, rapid breathing, or gum color changes",
+                "collapse, low energy, or worsening distress",
+            ],
+            "questions_to_ask_user": [
+                "Is breathing hard, noisy, fast, or labored?",
+                "Any blue or pale gums, collapse, low energy, or worsening signs?",
+            ],
+            "safe_next_steps": [
+                "Record cough timing, frequency, triggers, resting breathing rate, gum color, energy, and appetite.",
+                "Seek urgent veterinary care for labored breathing, blue/pale gums, collapse, or severe distress.",
+            ],
+        },
+    }
+    return {
+        "source": "deterministic_screening_fallback",
+        "non_diagnostic_notice": "This checklist supports triage discussion only; it is not a diagnosis.",
+        **checklists[domain],
+    }
+
+
+def _prioritize_professional_payload(
+    payload: list[dict[str, object]],
+    *,
+    domain: str | None,
+) -> list[dict[str, object]]:
+    if domain is None:
+        return payload
+    return sorted(
+        payload,
+        key=lambda item: (
+            0 if str(item.get("domain") or "") == domain else 1,
+            str(item.get("source_name") or ""),
+        ),
+    )
+
+
+def _prioritize_case_payload(
+    payload: list[dict[str, object]],
+    *,
+    domain: str | None,
+) -> list[dict[str, object]]:
+    if domain is None:
+        return payload
+    return sorted(
+        payload,
+        key=lambda item: (
+            0 if _case_matches_domain(item, domain=domain) else 1,
+            str(item.get("title") or ""),
+        ),
+    )
+
+
+def _case_matches_domain(item: dict[str, object], *, domain: str) -> bool:
+    domain_terms = {
+        "oral_neck": {"oral_mass", "salivary_gland", "dental_pain", "tongue_lump", "head_withdrawal"},
+        "gi": {"gi", "vomiting", "diarrhea", "bloody_stool", "black_tarry"},
+        "urinary": {"urinary", "cannot_pee", "blood_in_urine", "straining"},
+        "mobility": {"mobility", "acl", "ccl", "post_op", "non_weight_bearing", "patellar_luxation"},
+        "skin_lump": {"skin_lump", "allergy_or_mass_discussion"},
+        "respiratory": {"respiratory", "coughing", "breathing_difficulty"},
+    }.get(domain, {domain})
+    values: list[str] = []
+    for key in ("matched_symptoms", "possible_discussion_topics"):
+        raw_value = item.get(key)
+        if isinstance(raw_value, list):
+            values.extend(str(value) for value in raw_value)
+    return bool(set(values) & domain_terms)
+
+
+def _care_context_domain(
+    *, professional_payload: list[dict[str, object]], raw_text: str
+) -> str | None:
+    lowered = raw_text.lower()
+    if any(term in lowered for term in ["salivary", "mouth", "oral", "jaw", "chin", "neck"]):
+        return "oral_neck"
+    if any(term in lowered for term in ["pee", "urine", "urinary", "litter box"]):
+        return "urinary"
+    if any(term in lowered for term in ["vomit", "diarrhea", "poop", "stool", "gi"]):
+        return "gi"
+    if any(term in lowered for term in ["limp", "leg", "acl", "ccl", "walk"]):
+        return "mobility"
+    if any(term in lowered for term in ["skin", "lump", "bump", "itch"]):
+        return "skin_lump"
+    if any(term in lowered for term in ["cough", "breath", "wheez"]):
+        return "respiratory"
+    for reference in professional_payload:
+        domain = str(reference.get("domain") or "")
+        if domain in {"oral_neck", "gi", "urinary", "mobility", "skin_lump", "respiratory"}:
+            return domain
+    return None
 
 
 def _sse(event: str, data: dict[str, Any]) -> str:
@@ -483,6 +693,9 @@ def _pet_summary(pet: PetRecord) -> dict[str, Any]:
         "species": pet.dog_profile.species,
         "avatar": _pet_avatar(pet),
         "avatar_image": _pet_avatar_image(pet),
+        "avatar_zoom": _pet_avatar_number(pet, "avatar_zoom", 1.0),
+        "avatar_x": _pet_avatar_number(pet, "avatar_x", 50.0),
+        "avatar_y": _pet_avatar_number(pet, "avatar_y", 50.0),
         "observation_count": len(pet.observations),
     }
 
@@ -510,6 +723,17 @@ def _pet_avatar_image(pet: PetRecord) -> str | None:
         if note.startswith("avatar_image:"):
             return note.removeprefix("avatar_image:")
     return None
+
+
+def _pet_avatar_number(pet: PetRecord, key: str, default: float) -> float:
+    prefix = f"{key}:"
+    for note in pet.dog_profile.care_notes:
+        if note.startswith(prefix):
+            try:
+                return float(note.removeprefix(prefix))
+            except ValueError:
+                return default
+    return default
 
 
 def _mount_web_app(app: FastAPI) -> None:

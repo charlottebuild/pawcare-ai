@@ -136,6 +136,14 @@ python -m pawcare.evaluation.cost_benchmark --report-json /tmp/pawcare_cost_benc
 
 The benchmark reports cache hit rate, avoided retrieval/summarizer work, estimated context tokens saved, and latency. The token savings are deterministic estimates for engineering comparison, not production billing.
 
+Run the local route benchmark:
+
+```bash
+python -m pawcare.evaluation.route_benchmark --report-json /tmp/pawcare_route_benchmark.json
+```
+
+The route benchmark records local TestClient latency by API/workflow route, care-context cache status, response shape, and deterministic context-token estimates. It is for local engineering comparison, not production observability or provider billing.
+
 ---
 
 ## CI Regression Checks
