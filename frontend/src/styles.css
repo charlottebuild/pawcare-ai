@@ -997,6 +997,12 @@ a {
   color: var(--muted);
 }
 
+.view-more-context {
+  justify-self: start;
+  min-height: 36px;
+  padding: 8px 12px;
+}
+
 .case-card-topline {
   display: flex;
   justify-content: space-between;

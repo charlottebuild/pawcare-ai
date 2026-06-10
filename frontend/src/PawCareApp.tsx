@@ -1259,6 +1259,10 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
   const references = careContext?.professional_references || [];
   const relatedCases = careContext?.related_cases || [];
   const screeningChecklist = careContext?.screening_checklist || null;
+  const [expanded, setExpanded] = useState(false);
+  const visibleReferences = expanded ? references : references.slice(0, 1);
+  const visibleRelatedCases = expanded ? relatedCases : relatedCases.slice(0, 1);
+  const hiddenCardCount = references.length + relatedCases.length - visibleReferences.length - visibleRelatedCases.length;
   if (!careContext?.context_summary && !screeningChecklist && !references.length && !relatedCases.length) return null;
   return (
     <section className="related-cases" aria-label="Care context">
@@ -1267,10 +1271,10 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
         <span>Not a diagnosis</span>
       </div>
       {careContext?.non_diagnostic_notice && <p className="case-disclaimer">{careContext.non_diagnostic_notice}</p>}
-      {careContext?.context_summary && <p className="context-summary">{careContext.context_summary}</p>}
       {screeningChecklist && <ScreeningChecklistCard checklist={screeningChecklist} />}
+      {careContext?.context_summary && <p className="context-summary">{careContext.context_summary}</p>}
       <div className="case-card-list">
-        {references.map((item, index) => (
+        {visibleReferences.map((item, index) => (
           <article key={`ref-${index}`} className="case-card professional-reference-card">
             <div className="case-card-topline"><span>Vet reference</span><span>{item.relevance_level || "related"}</span></div>
             <h4>{item.source_name || "Professional reference"}</h4>
@@ -1281,7 +1285,7 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
             <SafeLink href={item.source_url} label="Open reference" />
           </article>
         ))}
-        {relatedCases.map((item, index) => (
+        {visibleRelatedCases.map((item, index) => (
           <article key={`case-${index}`} className="case-card">
             <div className="case-card-topline"><span>Similar case</span><span>{item.condition_discussion_priority || "discussion topic"}</span></div>
             <h4>{item.title || "Related pet case"}</h4>
@@ -1293,6 +1297,11 @@ function CareContextCards({ careContext }: { careContext: CareContext | null }) 
           </article>
         ))}
       </div>
+      {hiddenCardCount > 0 && (
+        <button className="secondary-button small-action view-more-context" type="button" onClick={() => setExpanded(!expanded)}>
+          {expanded ? "Show less" : `View ${hiddenCardCount} more ${hiddenCardCount === 1 ? "card" : "cards"}`}
+        </button>
+      )}
     </section>
   );
 }
@@ -1302,7 +1311,7 @@ function ScreeningChecklistCard({ checklist }: { checklist: NonNullable<CareCont
     <article className="case-card screening-checklist-card">
       <div className="case-card-topline">
         <span>Screening checklist</span>
-        <span>{labelForCategory(checklist.possible_domain || "review")}</span>
+        <span>{screeningSourceLabel(checklist.source)} · {labelForCategory(checklist.possible_domain || "review")}</span>
       </div>
       {checklist.non_diagnostic_notice && <p>{checklist.non_diagnostic_notice}</p>}
       {checklist.symptom_checklist?.length ? (
@@ -1316,6 +1325,10 @@ function ScreeningChecklistCard({ checklist }: { checklist: NonNullable<CareCont
       ) : null}
     </article>
   );
+}
+
+function screeningSourceLabel(source?: string) {
+  return source === "llm_screening" ? "AI screening" : "Rule-based screening";
 }
 
 function ChecklistSection({ title, items }: { title: string; items: string[] }) {

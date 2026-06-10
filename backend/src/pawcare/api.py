@@ -451,8 +451,21 @@ def _care_context_payload(
     pet: PetRecord,
     summarizer: KnowledgeSummarizer,
 ) -> dict[str, Any]:
+    domain = _care_context_domain(
+        professional_payload=professional_payload,
+        raw_text=raw_text,
+    )
+    professional_payload = _prioritize_professional_payload(
+        professional_payload,
+        domain=domain,
+    )
+    case_payload = _prioritize_case_payload(
+        case_payload,
+        domain=domain,
+    )
+    summary_matches = professional_payload[:1] + case_payload[:1]
     context_summary = summarizer.summarize(
-        matches=professional_payload + case_payload,
+        matches=summary_matches,
         raw_text=raw_text,
         pet_context={
             "pet_id": pet.pet_id,
@@ -471,6 +484,7 @@ def _care_context_payload(
             professional_payload=professional_payload,
             case_payload=case_payload,
             raw_text=raw_text,
+            domain=domain,
         ),
         "professional_references": professional_payload,
         "related_cases": case_payload,
@@ -482,10 +496,11 @@ def _screening_checklist_payload(
     professional_payload: list[dict[str, object]],
     case_payload: list[dict[str, object]],
     raw_text: str,
+    domain: str | None = None,
 ) -> dict[str, object] | None:
     if not professional_payload and not case_payload:
         return None
-    domain = _care_context_domain(professional_payload=professional_payload, raw_text=raw_text)
+    domain = domain or _care_context_domain(professional_payload=professional_payload, raw_text=raw_text)
     if domain is None:
         return None
     checklists = {
@@ -595,13 +610,58 @@ def _screening_checklist_payload(
     }
 
 
+def _prioritize_professional_payload(
+    payload: list[dict[str, object]],
+    *,
+    domain: str | None,
+) -> list[dict[str, object]]:
+    if domain is None:
+        return payload
+    return sorted(
+        payload,
+        key=lambda item: (
+            0 if str(item.get("domain") or "") == domain else 1,
+            str(item.get("source_name") or ""),
+        ),
+    )
+
+
+def _prioritize_case_payload(
+    payload: list[dict[str, object]],
+    *,
+    domain: str | None,
+) -> list[dict[str, object]]:
+    if domain is None:
+        return payload
+    return sorted(
+        payload,
+        key=lambda item: (
+            0 if _case_matches_domain(item, domain=domain) else 1,
+            str(item.get("title") or ""),
+        ),
+    )
+
+
+def _case_matches_domain(item: dict[str, object], *, domain: str) -> bool:
+    domain_terms = {
+        "oral_neck": {"oral_mass", "salivary_gland", "dental_pain", "tongue_lump", "head_withdrawal"},
+        "gi": {"gi", "vomiting", "diarrhea", "bloody_stool", "black_tarry"},
+        "urinary": {"urinary", "cannot_pee", "blood_in_urine", "straining"},
+        "mobility": {"mobility", "acl", "ccl", "post_op", "non_weight_bearing", "patellar_luxation"},
+        "skin_lump": {"skin_lump", "allergy_or_mass_discussion"},
+        "respiratory": {"respiratory", "coughing", "breathing_difficulty"},
+    }.get(domain, {domain})
+    values: list[str] = []
+    for key in ("matched_symptoms", "possible_discussion_topics"):
+        raw_value = item.get(key)
+        if isinstance(raw_value, list):
+            values.extend(str(value) for value in raw_value)
+    return bool(set(values) & domain_terms)
+
+
 def _care_context_domain(
     *, professional_payload: list[dict[str, object]], raw_text: str
 ) -> str | None:
-    for reference in professional_payload:
-        domain = str(reference.get("domain") or "")
-        if domain in {"oral_neck", "gi", "urinary", "mobility", "skin_lump", "respiratory"}:
-            return domain
     lowered = raw_text.lower()
     if any(term in lowered for term in ["salivary", "mouth", "oral", "jaw", "chin", "neck"]):
         return "oral_neck"
@@ -615,6 +675,10 @@ def _care_context_domain(
         return "skin_lump"
     if any(term in lowered for term in ["cough", "breath", "wheez"]):
         return "respiratory"
+    for reference in professional_payload:
+        domain = str(reference.get("domain") or "")
+        if domain in {"oral_neck", "gi", "urinary", "mobility", "skin_lump", "respiratory"}:
+            return domain
     return None
 
 

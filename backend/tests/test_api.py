@@ -135,6 +135,10 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "avatar_image" in js_response.text
     assert "context_summary" in js_response.text
     assert "Screening checklist" in js_response.text
+    assert "Rule-based screening" in js_response.text
+    assert "AI screening" in js_response.text
+    assert "Show less" in js_response.text
+    assert "view-more-context" in css_response.text
     assert "Vet reference" in js_response.text
     assert "Similar case" in js_response.text
     assert "Professional references" not in js_response.text
@@ -546,6 +550,7 @@ def test_care_context_endpoint_returns_professional_references_and_cases() -> No
     assert response.status_code == 200
     assert "not a diagnosis" in body["non_diagnostic_notice"].lower()
     assert "not a diagnosis" in body["context_summary"].lower()
+    assert checklist["source"] == "deterministic_screening_fallback"
     assert checklist["possible_domain"] == "oral_neck"
     assert "trouble eating, chewing, or swallowing" in checklist["symptom_checklist"]
     assert checklist["questions_to_ask_user"]
@@ -556,6 +561,30 @@ def test_care_context_endpoint_returns_professional_references_and_cases() -> No
     assert "full_text" not in reference
     assert case["case_id"] == "case_oral_neck_001"
     assert body["cache_status"] == "miss"
+
+
+def test_care_context_prioritizes_oral_neck_context_over_generic_skin_lump() -> None:
+    client = _client()
+    _create_user_and_two_pets(client)
+
+    response = client.post(
+        "/v1/users/user_123/pets/dog_mochi/care-context",
+        json={
+            "raw_text": (
+                "Mochi has a soft bump under his chin and pulls his head back "
+                "when eating. Could this be something with his salivary gland?"
+            )
+        },
+    )
+
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["screening_checklist"]["possible_domain"] == "oral_neck"
+    assert body["professional_references"][0]["domain"] == "oral_neck"
+    assert "salivary" in body["context_summary"].lower()
+    assert "skin mass, cyst, infection, allergy" not in body["context_summary"].lower()
+    assert "salivary_gland" in body["related_cases"][0]["possible_discussion_topics"]
 
 
 def test_care_context_endpoint_uses_semantic_cache_for_similar_queries() -> None:
