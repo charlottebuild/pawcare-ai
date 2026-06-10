@@ -129,6 +129,7 @@ def test_local_app_page_and_static_assets_are_served() -> None:
     assert "Morning walk" in js_response.text
     assert "Add medication" in js_response.text
     assert "Use local photo" in js_response.text
+    assert "Drag to reposition" in js_response.text
     assert "Health baseline" in js_response.text
     assert "Domestic Shorthair" in js_response.text
     assert "avatar_image" in js_response.text
@@ -162,6 +163,9 @@ def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
                 "species": "dog",
                 "avatar": "collie",
                 "avatar_image": None,
+                "avatar_zoom": 1.0,
+                "avatar_x": 50.0,
+                "avatar_y": 50.0,
                 "observation_count": 0,
             },
             {
@@ -170,6 +174,9 @@ def test_create_user_create_two_pets_and_list_pet_summaries() -> None:
                 "species": "dog",
                 "avatar": "collie",
                 "avatar_image": None,
+                "avatar_zoom": 1.0,
+                "avatar_x": 50.0,
+                "avatar_y": 50.0,
                 "observation_count": 0,
             },
         ]

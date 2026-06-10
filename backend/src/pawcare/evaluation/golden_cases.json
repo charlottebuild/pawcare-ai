@@ -1802,5 +1802,79 @@
       "api_contract",
       "safety_forbidden_text"
     ]
+  },
+  {
+    "case_id": "svc_oral_salivary_concern_only_001",
+    "description": "Disease-name concern alone should be a non-diagnostic discussion, not a confirmed diagnosis.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "Could it be salivary gland cysts?",
+    "timestamp": "2026-05-08T09:15:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_ORAL_NECK_001"
+      ],
+      "must_include_text": [
+        "I can't diagnose from the app",
+        "Possible categories to discuss with a veterinarian",
+        "What to watch for"
+      ],
+      "must_not_include_text": [
+        "has salivary mucocele",
+        "has salivary gland cysts",
+        "is salivary mucocele"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
+  },
+  {
+    "case_id": "svc_oral_vet_diagnosis_context_001",
+    "description": "Vet-confirmed salivary mucocele should be treated as known diagnosis context.",
+    "target_layer": "service",
+    "pet_profile": {
+      "id": "dog_mochi",
+      "name": "Mochi",
+      "species": "dog"
+    },
+    "raw_text": "The vet diagnosed salivary mucocele yesterday.",
+    "timestamp": "2026-05-08T09:15:00-07:00",
+    "expected": {
+      "status": "attention_needed",
+      "risk_band": "moderate",
+      "must_include_guideline_ids": [
+        "GL_CONDITION_ORAL_NECK_001"
+      ],
+      "must_include_text": [
+        "veterinarian-diagnosed condition",
+        "Follow the veterinarian's instructions",
+        "Watch for"
+      ],
+      "must_not_include_text": [
+        "Possible categories to discuss",
+        "has salivary mucocele",
+        "is salivary mucocele"
+      ]
+    },
+    "category": "condition_triage",
+    "priority": "high",
+    "metrics": [
+      "risk_classification",
+      "guideline_grounding",
+      "response_content",
+      "safety_forbidden_text"
+    ]
   }
 ]

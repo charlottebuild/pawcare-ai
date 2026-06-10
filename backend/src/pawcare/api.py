@@ -483,6 +483,9 @@ def _pet_summary(pet: PetRecord) -> dict[str, Any]:
         "species": pet.dog_profile.species,
         "avatar": _pet_avatar(pet),
         "avatar_image": _pet_avatar_image(pet),
+        "avatar_zoom": _pet_avatar_number(pet, "avatar_zoom", 1.0),
+        "avatar_x": _pet_avatar_number(pet, "avatar_x", 50.0),
+        "avatar_y": _pet_avatar_number(pet, "avatar_y", 50.0),
         "observation_count": len(pet.observations),
     }
 
@@ -510,6 +513,17 @@ def _pet_avatar_image(pet: PetRecord) -> str | None:
         if note.startswith("avatar_image:"):
             return note.removeprefix("avatar_image:")
     return None
+
+
+def _pet_avatar_number(pet: PetRecord, key: str, default: float) -> float:
+    prefix = f"{key}:"
+    for note in pet.dog_profile.care_notes:
+        if note.startswith(prefix):
+            try:
+                return float(note.removeprefix(prefix))
+            except ValueError:
+                return default
+    return default
 
 
 def _mount_web_app(app: FastAPI) -> None:

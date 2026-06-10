@@ -317,9 +317,11 @@ a {
 .header-pet-avatar,
 .profile-avatar,
 .avatar-choice {
+  position: relative;
   display: block;
   background-size: cover;
   background-position: center;
+  overflow: hidden;
 }
 
 .pet-avatar {
@@ -379,6 +381,17 @@ a {
 
 .has-image {
   background-color: #ede9f4;
+}
+
+.avatar-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transition: transform 0.08s ease;
+  transform-origin: center;
+  user-select: none;
+  pointer-events: none;
 }
 
 .pet-status,
@@ -681,14 +694,68 @@ a {
 }
 
 .avatar-image-preview {
+  position: relative;
   display: grid;
   place-items: center;
-  min-height: 72px;
+  width: 112px;
+  height: 112px;
   border: 1px dashed var(--line);
-  border-radius: 14px;
-  background-size: cover;
-  background-position: center;
+  border-radius: 18px;
+  background-color: #fbfbfd;
   color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.avatar-image-preview.draggable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.avatar-image-preview.draggable:active {
+  cursor: grabbing;
+}
+
+.avatar-image-preview span {
+  position: absolute;
+  right: 9px;
+  bottom: 9px;
+  left: 9px;
+  border-radius: 999px;
+  background: rgba(18, 19, 24, 0.62);
+  color: white;
+  padding: 4px 6px;
+  font-size: 0.68rem;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
+}
+
+.avatar-image-preview:hover span,
+.avatar-image-preview:active span {
+  opacity: 1;
+}
+
+.avatar-crop-controls {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbfbfd;
+  padding: 12px;
+}
+
+.avatar-crop-controls input[type="range"] {
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+.avatar-crop-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
 }
 
 .timeline-head,

@@ -12,6 +12,9 @@ export type PetSummary = {
   species: string;
   avatar?: string | null;
   avatar_image?: string | null;
+  avatar_zoom?: number | null;
+  avatar_x?: number | null;
+  avatar_y?: number | null;
   observation_count: number;
 };
 

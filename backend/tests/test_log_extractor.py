@@ -193,6 +193,51 @@ def test_extracts_oral_neck_mass_condition_triage_signals() -> None:
     assert "GL_CONDITION_ORAL_NECK_001" in observation.source_guideline_ids
 
 
+def test_extracts_salivary_gland_cyst_wording_under_chin() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="It's growing fast under the chin, would it be possible of salivary gland cysts?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.category == ObservationCategory.other
+    assert observation.health_context["condition_domain"] == "oral_neck"
+    assert observation.health_context["asked_condition"] == "salivary gland cyst"
+    assert "rapid swelling or severe pain" in observation.health_context["red_flags"]
+    assert "GL_CONDITION_ORAL_NECK_001" in observation.source_guideline_ids
+
+
+def test_condition_name_alone_is_concern_not_symptom_red_flag() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="Could it be salivary gland cysts?",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.health_context["condition_domain"] == "oral_neck"
+    assert observation.health_context["asked_condition"] == "salivary gland cyst"
+    assert observation.health_context["condition_concern_only"] is True
+    assert observation.health_context["red_flags"] == []
+    assert "known_diagnosis_context" not in observation.health_context
+
+
+def test_vet_diagnosis_is_known_diagnosis_context() -> None:
+    batch = LogExtractor().extract(
+        dog_id="dog_123",
+        raw_text="The vet diagnosed salivary mucocele yesterday.",
+        timestamp="2026-05-08T09:15:00-07:00",
+    )
+
+    observation = batch.observations[0]
+    assert observation.health_context["condition_domain"] == "oral_neck"
+    assert observation.health_context["known_diagnosis_context"] is True
+    assert observation.health_context["known_diagnosis"] == "salivary mucocele"
+    assert observation.health_context["diagnosis_source"] == "veterinarian"
+    assert observation.health_context["red_flags"] == []
+
+
 def test_extracts_urinary_red_flag_condition_triage_signals() -> None:
     batch = LogExtractor().extract(
         dog_id="dog_123",

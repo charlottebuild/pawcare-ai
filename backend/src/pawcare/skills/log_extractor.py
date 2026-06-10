@@ -548,11 +548,27 @@ class LogExtractor:
         source: Source,
         sequence: int,
     ) -> Observation | None:
+        asked_condition = self._asked_condition(text)
+        has_question_intent = self._contains_any(text, TRIAGE_INTENT_TERMS)
         domain = self._condition_domain(text)
+        known_diagnosis = self._known_diagnosis_context(text)
+        condition_concern_only = False
+        if domain is None and known_diagnosis is not None:
+            domain = known_diagnosis["domain"]
+        if domain is None and asked_condition is not None and has_question_intent:
+            domain = self._condition_domain_from_condition(asked_condition)
+            condition_concern_only = True
         if domain is None:
             return None
 
         context = self._condition_context(text=text, domain=domain)
+        if condition_concern_only:
+            context["condition_concern_only"] = True
+            context["asked_condition"] = asked_condition
+        if known_diagnosis is not None:
+            context["known_diagnosis_context"] = True
+            context["known_diagnosis"] = known_diagnosis["condition"]
+            context["diagnosis_source"] = known_diagnosis["source"]
         category = {
             "gi": ObservationCategory.stool,
             "oral_neck": ObservationCategory.other,
@@ -590,10 +606,30 @@ class LogExtractor:
         domains = [
             ("respiratory", ["cough", "coughing", "breathing", "breath", "wheezing", "喘", "咳", "呼吸"]),
             ("urinary", ["urine", "pee", "peeing", "urinate", "urinating", "blood in urine", "litter box", "猫砂盆", "尿", "尿血"]),
-            ("oral_neck", ["drool", "drooling", "saliva", "salivary", "jaw", "neck", "under jaw", "mouth", "oral", "流口水", "下巴", "脖子", "口腔"]),
+            (
+                "oral_neck",
+                [
+                    "drool",
+                    "drooling",
+                    "excess saliva",
+                    "too much saliva",
+                    "saliva dripping",
+                    "jaw",
+                    "chin",
+                    "neck",
+                    "under jaw",
+                    "under chin",
+                    "mouth",
+                    "oral",
+                    "流口水",
+                    "下巴",
+                    "脖子",
+                    "口腔",
+                ],
+            ),
             ("skin_lump", ["skin", "itch", "itching", "scratch", "scratching", "lump", "bump", "mass", "swelling", "皮肤", "痒", "包", "肿块"]),
-            ("mobility", ["limp", "limping", "leg", "paw", "walk", "walking", "post-op", "acl", "ccl", "腿", "跛", "瘸", "术后"]),
-            ("gi", ["vomit", "diarrhea", "stool", "poop", "gastroenteritis", "parvo", "appetite", "吐", "拉稀", "腹泻", "肠胃炎", "细小", "便便"]),
+            ("mobility", ["limp", "limping", "leg", "paw", "walk", "walking", "post-op", "腿", "跛", "瘸", "术后"]),
+            ("gi", ["vomit", "diarrhea", "stool", "poop", "appetite", "吐", "拉稀", "腹泻", "便便"]),
         ]
         for domain, terms in domains:
             red_flag_triggers_triage = domain in {"urinary", "respiratory"} and self._condition_red_flag_present(text, domain)
@@ -637,6 +673,8 @@ class LogExtractor:
             "parvo",
             "salivary mucocele",
             "salivary cyst",
+            "salivary gland cyst",
+            "salivary gland cysts",
             "uti",
             "urinary tract infection",
             "infection",
@@ -649,6 +687,49 @@ class LogExtractor:
             if term in text:
                 return term
         return None
+
+    def _known_diagnosis_context(self, text: str) -> dict[str, str] | None:
+        diagnosis_terms = [
+            "vet diagnosed",
+            "vet said",
+            "doctor diagnosed",
+            "doctor said",
+            "confirmed by vet",
+            "diagnosed with",
+            "diagnosis is",
+            "医生说",
+            "兽医说",
+            "确诊",
+            "诊断",
+        ]
+        if not self._contains_any(text, diagnosis_terms):
+            return None
+        condition = self._asked_condition(text)
+        if condition is None:
+            return None
+        return {
+            "condition": condition,
+            "domain": self._condition_domain_from_condition(condition),
+            "source": "veterinarian",
+        }
+
+    def _condition_domain_from_condition(self, condition: str) -> str:
+        domain_by_condition = {
+            "gastroenteritis": "gi",
+            "parvo": "gi",
+            "salivary mucocele": "oral_neck",
+            "salivary cyst": "oral_neck",
+            "salivary gland cyst": "oral_neck",
+            "salivary gland cysts": "oral_neck",
+            "uti": "urinary",
+            "urinary tract infection": "urinary",
+            "infection": "urinary",
+            "肠胃炎": "gi",
+            "细小": "gi",
+            "唾液腺囊肿": "oral_neck",
+            "尿路感染": "urinary",
+        }
+        return domain_by_condition.get(condition, "gi")
 
     def _possible_categories(self, domain: str) -> list[str]:
         return {
@@ -669,7 +750,7 @@ class LogExtractor:
             ],
             "oral_neck": [
                 ("trouble swallowing or breathing", ["trouble swallowing", "can't swallow", "breathing", "吞咽", "呼吸"]),
-                ("rapid swelling or severe pain", ["rapid", "getting bigger", "pain", "疼", "变大"]),
+                ("rapid swelling or severe pain", ["rapid", "getting bigger", "grow fast", "grows fast", "growing fast", "pain", "疼", "变大"]),
             ],
             "mobility": [
                 ("non-weight-bearing or worsening pain", ["non weight", "non-weight", "can't bear weight", "worse", "pain", "不负重", "疼"]),

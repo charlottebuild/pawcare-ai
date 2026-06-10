@@ -193,6 +193,66 @@ def test_service_returns_oral_neck_mass_triage_with_salivary_mucocele_direction(
     assert "has salivary mucocele" not in result.response.message.lower()
 
 
+def test_service_returns_oral_neck_triage_for_salivary_gland_cyst_wording() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_008b",
+        dog_id="dog_123",
+        raw_text="It's growing fast under the chin, would it be possible of salivary gland cysts?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "I can't diagnose from the app" in result.response.message
+    assert "salivary mucocele" in result.response.message
+    assert "What to record before the visit" in result.response.message
+    assert "GL_CONDITION_ORAL_NECK_001" in result.response.source_guideline_ids
+    assert "has salivary" not in result.response.message.lower()
+
+
+def test_service_returns_condition_discussion_for_disease_concern_only() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_008c",
+        dog_id="dog_123",
+        raw_text="Could it be salivary gland cysts?",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "I can't diagnose from the app" in result.response.message
+    assert "Possible categories to discuss with a veterinarian" in result.response.message
+    assert "salivary mucocele" in result.response.message
+    assert "GL_CONDITION_ORAL_NECK_001" in result.response.source_guideline_ids
+    assert "has salivary" not in result.response.message.lower()
+
+
+def test_service_treats_vet_diagnosis_as_follow_up_context() -> None:
+    result = LogProcessingService().process_log(
+        workflow_id="wf_008d",
+        dog_id="dog_123",
+        raw_text="The vet diagnosed salivary mucocele yesterday.",
+        timestamp="2026-05-08T09:15:00-07:00",
+        dog_profile=_dog_profile(),
+        behavioral_baseline=_behavioral_baseline(),
+        health_baseline=_health_baseline(),
+    )
+
+    assert result.response.status == "attention_needed"
+    assert result.response.risk_band == "moderate"
+    assert "veterinarian-diagnosed condition" in result.response.message
+    assert "Follow the veterinarian's instructions" in result.response.message
+    assert "Possible categories to discuss" not in result.response.message
+    assert "GL_CONDITION_ORAL_NECK_001" in result.response.source_guideline_ids
+    assert "has salivary" not in result.response.message.lower()
+
+
 def test_service_escalates_urinary_obstruction_triage() -> None:
     result = LogProcessingService().process_log(
         workflow_id="wf_009",
