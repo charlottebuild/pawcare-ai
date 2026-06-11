@@ -1823,7 +1823,7 @@
       "must_include_text": [
         "I can't diagnose from the app",
         "Possible categories to discuss with a veterinarian",
-        "What to watch for"
+        "Check whether you see"
       ],
       "must_not_include_text": [
         "has salivary mucocele",

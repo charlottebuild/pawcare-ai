@@ -583,6 +583,10 @@ a {
   color: var(--muted);
 }
 
+.chat-bubble p {
+  white-space: pre-line;
+}
+
 .quick-actions,
 .chat-composer,
 .care-form-actions {

@@ -166,6 +166,7 @@ def test_service_returns_non_diagnostic_gi_condition_triage() -> None:
     assert result.response.risk_band == "moderate"
     assert "I can't diagnose from the app" in result.response.message
     assert "Possible categories to discuss with a veterinarian" in result.response.message
+    assert "Check whether you see" in result.response.message
     assert "gastroenteritis" in result.response.message
     assert "parvo" not in result.response.message.lower() or "This is parvo" not in result.response.message
     assert "GL_CONDITION_GI_001" in result.response.source_guideline_ids
@@ -188,6 +189,7 @@ def test_service_returns_oral_neck_mass_triage_with_salivary_mucocele_direction(
     assert "I can't diagnose from the app" in result.response.message
     assert "salivary mucocele" in result.response.message
     assert "dental or oral disease" in result.response.message
+    assert "Check whether you see" in result.response.message
     assert "What to record before the visit" in result.response.message
     assert "GL_CONDITION_ORAL_NECK_001" in result.response.source_guideline_ids
     assert "has salivary mucocele" not in result.response.message.lower()

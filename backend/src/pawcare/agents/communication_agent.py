@@ -143,22 +143,25 @@ class CommunicationAgent:
     def _condition_triage_message(self, risk_assessment: RiskAssessment) -> str:
         profile = self._condition_profile(risk_assessment.source_guideline_ids)
         urgent_prefix = (
-            "This has urgent red flags. "
+            "This has urgent red flags.\n\n"
             if risk_assessment.risk_band in {"high", "urgent"}
             else ""
         )
         escalation = (
-            "When to contact a vet urgently: "
+            "When to contact a vet urgently:\n- "
             + "; ".join(risk_assessment.escalation_conditions[:4])
             + "."
             if risk_assessment.escalation_conditions
-            else "When to contact a vet urgently: if symptoms worsen, combine with low energy, pain, blood, breathing trouble, or refusal to eat or drink."
+            else "When to contact a vet urgently:\n- If symptoms worsen, combine with low energy, pain, blood, breathing trouble, or refusal to eat or drink."
         )
         return (
-            f"{urgent_prefix}I can't diagnose from the app. "
-            f"Possible categories to discuss with a veterinarian: {', '.join(profile['possible'])}. "
-            f"What to watch for: {profile['watch']}. "
-            f"What to record before the visit: {', '.join(profile['record'])}. "
+            f"{urgent_prefix}I can't diagnose from the app.\n\n"
+            "Possible categories to discuss with a veterinarian:\n"
+            f"- {', '.join(profile['possible'])}.\n\n"
+            "Check whether you see:\n"
+            f"- {profile['watch']}.\n\n"
+            "What to record before the visit:\n"
+            f"- {', '.join(profile['record'])}.\n\n"
             f"{escalation}"
         )
 
