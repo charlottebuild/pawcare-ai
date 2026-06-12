@@ -1,10 +1,23 @@
 from pathlib import Path
 
-from pawcare.services import KnowledgePackLoader, LocalKnowledgeIndex
+from pawcare.services import (
+    HybridKnowledgeIndex,
+    KnowledgePackLoader,
+    LocalKnowledgeIndex,
+    VectorKnowledgeIndex,
+)
 
 
 def _index() -> LocalKnowledgeIndex:
     return LocalKnowledgeIndex(records=KnowledgePackLoader().load_seed_records())
+
+
+def _vector_index() -> VectorKnowledgeIndex:
+    return VectorKnowledgeIndex(records=KnowledgePackLoader().load_seed_records())
+
+
+def _hybrid_index() -> HybridKnowledgeIndex:
+    return HybridKnowledgeIndex(records=KnowledgePackLoader().load_seed_records())
 
 
 def test_health_records_match_all_core_domains() -> None:
@@ -54,6 +67,57 @@ def test_community_cases_match_seeded_symptom_domains() -> None:
             limit=5,
         )
         assert any(match.record.record_id == record_id for match in matches)
+
+
+def test_vector_index_recalls_oral_context_from_natural_language() -> None:
+    matches = _vector_index().search(
+        query_text="my dog pulls his head back while eating and chews weirdly",
+        kinds={"professional"},
+        limit=5,
+    )
+
+    assert any(match.record.domain == "oral_neck" for match in matches)
+    assert any(
+        "head_withdrawal" in match.matched_signals
+        or "dental_or_oral_pain" in match.matched_signals
+        for match in matches
+    )
+
+
+def test_vector_index_recalls_mobility_context_from_floor_wording() -> None:
+    matches = _vector_index().search(
+        query_text="his back leg won't touch the floor after surgery",
+        kinds={"community_case"},
+        limit=5,
+    )
+
+    assert any(
+        match.record.record_id in {"case_acl_postop_001", "case_patella_001"}
+        for match in matches
+    )
+
+
+def test_hybrid_index_combines_keyword_and_vector_results_without_duplicates() -> None:
+    matches = _hybrid_index().search(
+        query_text="chin swelling and eating weird, could it be salivary gland cysts?",
+        kinds={"professional"},
+        limit=5,
+    )
+    record_ids = [match.record.record_id for match in matches]
+
+    assert len(record_ids) == len(set(record_ids))
+    assert matches[0].record.domain == "oral_neck"
+
+
+def test_hybrid_index_preserves_domain_and_kind_filters() -> None:
+    matches = _hybrid_index().search(
+        query_text="chin swelling while eating",
+        domains={"mobility"},
+        kinds={"professional"},
+        limit=5,
+    )
+
+    assert all(match.record.domain == "mobility" for match in matches)
 
 
 def test_load_json_records_for_manual_import(tmp_path: Path) -> None:

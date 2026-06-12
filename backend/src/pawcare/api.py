@@ -645,17 +645,19 @@ def _prioritize_case_payload(
 def _case_matches_domain(item: dict[str, object], *, domain: str) -> bool:
     domain_terms = {
         "oral_neck": {"oral_mass", "salivary_gland", "dental_pain", "tongue_lump", "head_withdrawal"},
-        "gi": {"gi", "vomiting", "diarrhea", "bloody_stool", "black_tarry"},
-        "urinary": {"urinary", "cannot_pee", "blood_in_urine", "straining"},
-        "mobility": {"mobility", "acl", "ccl", "post_op", "non_weight_bearing", "patellar_luxation"},
+        "gi": {"gi", "dietary_irritation", "infection_discussion", "vomiting", "diarrhea", "bloody_stool", "black_tarry"},
+        "urinary": {"urinary", "urinary_blockage", "uti_discussion", "cannot_pee", "blood_in_urine", "straining"},
+        "mobility": {"mobility", "acl", "ccl", "post_op", "orthopedic_follow_up", "non_weight_bearing", "patellar_luxation"},
         "skin_lump": {"skin_lump", "allergy_or_mass_discussion"},
-        "respiratory": {"respiratory", "coughing", "breathing_difficulty"},
+        "respiratory": {"respiratory", "respiratory_distress", "airway_or_lung_issue", "coughing", "breathing_difficulty"},
+        "abdominal": {"bloat_gdv", "abdominal_emergency"},
+        "neurologic": {"seizure_like_episode", "syncope_discussion", "toxin_exposure"},
+        "eye": {"eye_trauma", "corneal_injury", "vision_change"},
     }.get(domain, {domain})
     values: list[str] = []
-    for key in ("matched_symptoms", "possible_discussion_topics"):
-        raw_value = item.get(key)
-        if isinstance(raw_value, list):
-            values.extend(str(value) for value in raw_value)
+    raw_value = item.get("possible_discussion_topics")
+    if isinstance(raw_value, list):
+        values.extend(str(value) for value in raw_value)
     return bool(set(values) & domain_terms)
 
 

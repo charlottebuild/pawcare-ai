@@ -13,7 +13,7 @@ from pawcare.services.knowledge_fts_index import (
     SQLiteKnowledgeFTSIndex,
     seed_professional_knowledge_documents,
 )
-from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
+from pawcare.services.knowledge_index import HybridKnowledgeIndex, KnowledgeIndex
 from pawcare.services.pet_models import PetRecord
 from pawcare.skills.symptom_understanding import (
     extract_canonical_terms,
@@ -32,7 +32,7 @@ class ProfessionalReferenceService:
         fts_index: SQLiteKnowledgeFTSIndex | None = None,
     ) -> None:
         self.references = references or seed_professional_references()
-        self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
+        self.knowledge_index = knowledge_index or HybridKnowledgeIndex(
             records=[
                 professional_reference_to_record(reference)
                 for reference in self.references
@@ -101,7 +101,7 @@ class ProfessionalReferenceService:
     def _trigger_matches(self, *, raw_text: str, match: KnowledgeMatch) -> bool:
         trigger_terms = extract_canonical_terms(raw_text)
         if not trigger_terms:
-            return False
+            return match.relevance_score >= 10
         return bool(set(match.matched_signals) & trigger_terms)
 
     def _to_match(self, match: KnowledgeMatch) -> ProfessionalReferenceMatch:

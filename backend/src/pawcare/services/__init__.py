@@ -11,7 +11,12 @@ from pawcare.services.case_models import (
     ProfessionalReferenceMatch,
 )
 from pawcare.services.behavior_reference_service import BehaviorReferenceService
-from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
+from pawcare.services.knowledge_index import (
+    HybridKnowledgeIndex,
+    KnowledgeIndex,
+    LocalKnowledgeIndex,
+    VectorKnowledgeIndex,
+)
 from pawcare.services.knowledge_fts_index import (
     KnowledgeChunker,
     SQLiteKnowledgeFTSIndex,
@@ -102,6 +107,7 @@ __all__ = [
     "KnowledgeRecord",
     "KnowledgeSummarizer",
     "LocalKnowledgeIndex",
+    "HybridKnowledgeIndex",
     "LogProcessingResult",
     "LogProcessingService",
     "MonitoringAlert",
@@ -122,6 +128,7 @@ __all__ = [
     "SimilarCaseService",
     "SummaryWorker",
     "UserAccount",
+    "VectorKnowledgeIndex",
     "WeeklyPetSummary",
     "DeterministicKnowledgeSummarizer",
     "DeterministicLLMSignalScreeningService",

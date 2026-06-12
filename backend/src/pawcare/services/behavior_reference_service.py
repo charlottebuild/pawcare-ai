@@ -15,7 +15,7 @@ from pawcare.services.knowledge_fts_index import (
     SQLiteKnowledgeFTSIndex,
     seed_professional_knowledge_documents,
 )
-from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
+from pawcare.services.knowledge_index import HybridKnowledgeIndex, KnowledgeIndex
 from pawcare.skills.symptom_understanding import normalize_identifier
 
 
@@ -30,7 +30,7 @@ class BehaviorReferenceService:
         fts_index: SQLiteKnowledgeFTSIndex | None = None,
     ) -> None:
         self.references = references or seed_behavior_references()
-        self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
+        self.knowledge_index = knowledge_index or HybridKnowledgeIndex(
             records=[behavior_reference_to_record(reference) for reference in self.references]
         )
         self.fts_index = fts_index or SQLiteKnowledgeFTSIndex()

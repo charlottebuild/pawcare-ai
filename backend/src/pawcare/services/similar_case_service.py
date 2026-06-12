@@ -5,7 +5,7 @@ from dataclasses import asdict
 from pawcare.schemas.state import Observation
 from pawcare.services.case_models import CaseMatch, CommunityCase
 from pawcare.services.knowledge_adapters import community_case_to_record
-from pawcare.services.knowledge_index import KnowledgeIndex, LocalKnowledgeIndex
+from pawcare.services.knowledge_index import HybridKnowledgeIndex, KnowledgeIndex
 from pawcare.services.pet_models import PetRecord
 from pawcare.skills.symptom_understanding import (
     extract_canonical_terms,
@@ -23,7 +23,7 @@ class SimilarCaseService:
         knowledge_index: KnowledgeIndex | None = None,
     ) -> None:
         self.cases = cases or seed_community_cases()
-        self.knowledge_index = knowledge_index or LocalKnowledgeIndex(
+        self.knowledge_index = knowledge_index or HybridKnowledgeIndex(
             records=[community_case_to_record(case) for case in self.cases]
         )
 
@@ -57,7 +57,8 @@ class SimilarCaseService:
         filtered = [
             self._to_match(match)
             for match in matches
-            if set(match.matched_signals) & trigger_terms
+            if not trigger_terms
+            or set(match.matched_signals) & trigger_terms
         ]
         return filtered[:limit]
 

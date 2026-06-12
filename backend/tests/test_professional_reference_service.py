@@ -126,3 +126,13 @@ def test_matches_oral_pain_reference_without_copying_source_text() -> None:
 
     assert any("Disorders of the Mouth" in match.source_name for match in matches)
     assert all(len(match.summary) < 280 for match in matches)
+
+
+def test_hybrid_retrieval_recalls_oral_neck_from_messy_real_world_wording() -> None:
+    matches = ProfessionalReferenceService().find_matches(
+        raw_text="His chin looks swollen and he eats weird, could it be a saliva cyst?",
+        pet=_pet(),
+    )
+
+    assert matches[0].domain == "oral_neck"
+    assert any("salivary" in topic for topic in matches[0].vet_discussion_topics)
